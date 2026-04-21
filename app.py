@@ -124,8 +124,8 @@ if not lap_time:
 return None
 try:
 s = str(lap_time).strip()
-if ‘:’ in s:
-m, sec = s.split(’:’, 1)
+if ':' in s:
+m, sec = s.split(':', 1)
 return int(m) * 60 + float(sec)
 return float(s)
 except (ValueError, AttributeError):
@@ -137,11 +137,11 @@ s = secs % 60
 return ‘%d:%06.3f’ % (m, s)
 
 def parse_event_date(ev):
-for key in (‘date’, ‘startDate’, ‘start_date’, ‘eventDate’, ‘event_date’):
+for key in ('date', 'startDate’, 'start_date', 'eventDate', 'event_date'):
 val = ev.get(key)
 if val:
 try:
-dt = datetime.fromisoformat(str(val).replace(‘Z’, ‘+00:00’))
+dt = datetime.fromisoformat(str(val).replace('Z', '+00:00'))
 return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 except ValueError:
 continue
@@ -183,15 +183,15 @@ return client.get_results(session_id) or []
 
 with st.expander(‘Advanced: Organisation Settings’, expanded=False):
 org_id = st.number_input(
-‘Speedhive Org ID’,
+'Speedhive Org ID',
 min_value=1, value=41593, step=1,
-help=‘Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX’,
+help='Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX',
 )
 st.caption(‘Default 41593 = NASA Mid-Atlantic’)
 
 # ––––– main filters (always visible) ————————————
 
-st.markdown(’#### Filters’)
+st.markdown('#### Filters')
 
 col_a, col_b = st.columns(2)
 with col_a:
@@ -272,7 +272,7 @@ if not matching_events:
 progress_bar.empty()
 st.warning(
 “No events found for ‘%s’ between %s and %s. “
-“Try a shorter name fragment or switch to ‘Type manually’.”
+"Try a shorter name fragment or switch to ‘Type manually’."
 % (track_filter or ‘all tracks’, date_from, date_to)
 )
 st.stop()
