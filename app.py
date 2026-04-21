@@ -410,17 +410,15 @@ for i, ev in enumerate(matching):
                 status.empty()
                 st.warning('DEBUG MODE -- Lightning race session: **%s** | Group: **%s**' % (sess_name, sess_group))
                 st.markdown('**Total rows:** `%d`' % len(rows_dbg))
-                for r in rows_dbg[:5]:
-                    raw_fields = r.get('additionalFields') or []
-                    parsed = []
-                    for f in raw_fields:
-                        t = parse_time_str(f)
-                        parsed.append('%s -> %s' % (repr(f), ('%.3fs' % t) if t else 'None'))
-                    st.markdown('**Driver:** `%s` | **Class:** `%s`' % (r.get('name','?'), repr(r.get('resultClass',''))))
-                    st.markdown('**additionalFields:** `%s`' % str(raw_fields))
-                    st.markdown('**Parsed:** `%s`' % str(parsed))
+                for r in rows_dbg[:3]:
+                    st.markdown('**Full row dict:**')
+                    # Show every key/value in the row
+                    for k, v in r.items():
+                        t = parse_time_str(v) if isinstance(v, str) else None
+                        parsed_note = ' -> %.3fs' % t if t else ''
+                        st.markdown('`%s`: `%s`%s' % (k, repr(v), parsed_note))
                     st.divider()
-                st.info('Turn off Debug mode once you can see which additionalField index holds the best lap time.')
+                st.info('Look for any field that contains a lap time like 1:47.xxx. Turn off Debug mode once identified.')
                 st.stop()
         # ------------------------------------------------------------------
 
