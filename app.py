@@ -289,7 +289,7 @@ with st.expander('Advanced: Organisation Settings', expanded=False):
         'Speedhive Org ID', min_value=1, value=41593, step=1,
         help='Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX',
     )
-    st.caption('Default 41593 = NASA Mid-Atlantic')
+    st.caption('Default 41593 = NASA Southeast')
     debug_mode = st.checkbox('Debug mode (show raw API data for first matching session)')
 
 # ---------- filters -----------------------------------------------------------
