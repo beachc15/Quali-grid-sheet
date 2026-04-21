@@ -342,6 +342,10 @@ for i, ev in enumerate(matching):
         sess_name  = sess.get('name', '') or ''
         sess_group = sess.get('groupName', '') or ''
 
+        # Only process sessions with 'lightning' in the title
+        if not name_matches(sess_name + ' ' + sess_group, 'lightning'):
+            continue
+
         rows = fetch_classification(sess_id)
 
         # ---- debug: show raw data for first session that has any rows ----
