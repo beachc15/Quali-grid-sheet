@@ -184,18 +184,18 @@ def parse_time_str(value):
         return None
 
 
-def best_lap_from_fields(fields):
+def best_lap_from_fields(fields, min_sec=30.0, max_sec=900.0):
     '''
     From additionalFields[], find the value that looks most like a single lap time.
-    Strategy: pick the SMALLEST time that falls within plausible lap time range.
-    This correctly ignores total race time (too large) and gaps/diffs (too small).
+    Strategy: pick the SMALLEST time that falls within the plausible lap time range.
+    This ignores total race time (too large) and gap/diff values (too small).
     '''
     best = None
     for f in (fields or []):
         t = parse_time_str(f)
         if t is None:
             continue
-        if t < LAP_MIN_SECONDS or t > LAP_MAX_SECONDS:
+        if t < min_sec or t > max_sec:
             continue
         if best is None or t < best:
             best = t
@@ -348,35 +348,44 @@ for i, ev in enumerate(matching):
 
         rows = fetch_classification(sess_id)
 
-        # ---- debug: show raw data for first session that has any rows ----
+        # ---- debug: show raw data + filter diagnostics ---------------------
         if debug_mode and not debug_shown and rows:
             debug_shown = True
             prog.empty()
             status.empty()
-            st.warning('DEBUG MODE -- showing raw data for: %s / %s' % (ev_name, sess_name))
-            sample = rows[:3]
-            for r in sample:
+            st.warning('DEBUG MODE -- Session: **%s** / Group: **%s**' % (sess_name, sess_group))
+            for r in rows[:5]:
+                raw_class  = r.get('resultClass', '')
+                raw_fields = r.get('additionalFields') or []
+                parsed_times = []
+                for f in raw_fields:
+                    t = parse_time_str(f)
+                    parsed_times.append('%s -> %s' % (repr(f), ('%.3fs' % t) if t else 'None'))
+                best = best_lap_from_fields(raw_fields, min_sec=30.0, max_sec=900.0)
+                class_match = (not class_filter) or name_matches(raw_class.strip(), class_filter)
                 st.markdown('**Driver:** `%s`' % r.get('name', '?'))
-                st.markdown('**resultClass:** `%s`' % r.get('resultClass', '?'))
-                st.markdown('**additionalFields:** `%s`' % str(r.get('additionalFields', [])))
-                st.markdown('**Full row:** `%s`' % str(r))
+                st.markdown('**resultClass raw repr:** `%s`' % repr(raw_class))
+                st.markdown('**Class filter "%s" matches:** `%s`' % (class_filter, class_match))
+                st.markdown('**additionalFields parsed:** `%s`' % str(parsed_times))
+                st.markdown('**Best lap picked (30-900s):** `%s`' % (('%.3fs = %s' % (best, seconds_to_lap(best))) if best else 'NONE -- no times in 30-900s range'))
                 st.divider()
-            st.info('Turn off Debug mode in Advanced Settings once you have identified the class name and correct lap time field.')
+            st.info('Turn off Debug mode once you understand the data.')
             st.stop()
         # ------------------------------------------------------------------
 
         for row in rows:
-            driver     = row.get('name') or 'Unknown'
-            row_class  = row.get('resultClass') or ''
+            driver    = row.get('name') or 'Unknown'
+            # Strip whitespace to handle hidden spaces/chars in resultClass
+            row_class = (row.get('resultClass') or '').strip()
 
-            # Class filter: check session name, group name, AND resultClass
+            # Class filter: match against resultClass directly, or session name
             if class_filter:
-                searchable = ' '.join([sess_name, sess_group, row_class])
-                if not name_matches(searchable, class_filter):
+                if not name_matches(row_class, class_filter) and                    not name_matches(sess_name + ' ' + sess_group, class_filter):
                     continue
 
             fields   = row.get('additionalFields') or []
-            best_sec = best_lap_from_fields(fields)
+            # Wide range (30s-900s) to catch edge cases
+            best_sec = best_lap_from_fields(fields, min_sec=30.0, max_sec=900.0)
 
             if best_sec is None:
                 continue
