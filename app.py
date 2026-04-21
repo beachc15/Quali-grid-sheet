@@ -449,6 +449,7 @@ for i, ev in enumerate(matching):
                     'Track':    track,
                     'Session':  sess_name,
                     'Date':     date_str,
+                    'URL':      'https://speedhive.mylaps.com/Sessions/%d' % sess_id,
                 }
 
 prog.progress(100, text='Done!')
@@ -490,12 +491,13 @@ for pos, row in enumerate(grid, 1):
         '<td class="laptime">%s</td>'
         '<td class="meta">%s</td>'
         '<td class="meta">%s</td>'
+        '<td class="meta"><a href="%s" target="_blank" style="color:#63b3ed;">View</a></td>'
         '</tr>'
-    ) % (pos, row['Driver'], row['Best Lap'], row['Event'], row['Date'])
+    ) % (pos, row['Driver'], row['Best Lap'], row['Event'], row['Date'], row.get('URL', '#'))
 
 st.markdown('''
 <table class="grid-table">
-  <thead><tr><th>#</th><th>Driver</th><th>Best Lap</th><th>Event</th><th>Date</th></tr></thead>
+  <thead><tr><th>#</th><th>Driver</th><th>Best Lap</th><th>Event</th><th>Date</th><th>Results</th></tr></thead>
   <tbody>%s</tbody>
 </table>
 ''' % rows_html, unsafe_allow_html=True)
@@ -505,7 +507,7 @@ st.markdown('<br>', unsafe_allow_html=True)
 df = pd.DataFrame([
     {'Position': pos, 'Driver': r['Driver'], 'Class': r['Class'],
      'Best Lap': r['Best Lap'], 'Event': r['Event'], 'Track': r['Track'],
-     'Session': r['Session'], 'Date': r['Date']}
+     'Session': r['Session'], 'Date': r['Date'], 'Results URL': r.get('URL', '')}
     for pos, r in enumerate(grid, 1)
 ])
 
