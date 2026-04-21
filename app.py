@@ -72,7 +72,8 @@ st.markdown('''
   div[data-testid="stDateInput"] label,
   div[data-testid="stTextInput"] label,
   div[data-testid="stNumberInput"] label,
-  div[data-testid="stRadio"] label {
+  div[data-testid="stRadio"] label,
+  div[data-testid="stCheckbox"] label {
     color: #a0aec0 !important; font-family: 'Barlow Condensed', sans-serif !important;
     font-size: 0.75rem !important; font-weight: 600 !important;
     letter-spacing: 0.1em !important; text-transform: uppercase !important;
@@ -91,15 +92,6 @@ st.markdown('''
 
 
 # ---------- API ---------------------------------------------------------------
-# Base: https://eventresults-api.speedhive.com
-# Key endpoints (from official Go client source):
-#   GET /organizations/{id}/events?count=N&offset=N
-#     -> Event[] where event.location.name = track name, event.startDate = date
-#   GET /events/{id}/sessions
-#     -> Session[] where session.name/groupName = session name
-#   GET /sessions/{id}/classification
-#     -> { rows: IRunRow[], classes: string[] }
-#       IRunRow: { name (driver), resultClass, additionalFields: [bestLap, ...] }
 
 BASE = 'https://eventresults-api.speedhive.com'
 HEADERS = {'Origin': 'https://sporthive.com', 'Accept': 'application/json'}
@@ -136,17 +128,14 @@ def fetch_all_events(org_id):
 def fetch_sessions(event_id):
     try:
         data = api_get('/events/%d/sessions' % event_id)
-        # Response may be a SessionGrouping: { sessions: [], groups: [] }
-        # or a flat list
         if isinstance(data, list):
             return data
-        # Flatten sessions from groups recursively
         sessions = list(data.get('sessions') or [])
-        def flatten_groups(groups):
+        def flatten(groups):
             for g in (groups or []):
                 sessions.extend(g.get('sessions') or [])
-                flatten_groups(g.get('subGroups') or [])
-        flatten_groups(data.get('groups') or [])
+                flatten(g.get('subGroups') or [])
+        flatten(data.get('groups') or [])
         return sessions
     except Exception:
         return []
@@ -165,33 +154,52 @@ def fetch_classification(session_id):
 
 # ---------- helpers -----------------------------------------------------------
 
-def parse_lap_time(value):
-    '''Convert various lap time formats to total seconds. Returns None if unparseable.'''
+# Best lap for a car race at a road course is typically between 45s and 9min.
+LAP_MIN_SECONDS = 45.0
+LAP_MAX_SECONDS = 540.0  # 9 minutes
+
+
+def parse_time_str(value):
+    '''Parse a time string like M:SS.mmm or H:MM:SS.mmm to seconds. Returns None on failure.'''
     if value is None:
         return None
     s = str(value).strip()
-    if not s or s in ('-', 'DNS', 'DNF', 'DQ', ''):
+    if not s or s in ('-', 'DNS', 'DNF', 'DQ', 'N/A', ''):
         return None
-    # Format: M:SS.mmm or H:MM:SS.mmm
-    if ':' in s:
-        parts = s.split(':')
-        try:
+    try:
+        if ':' in s:
+            parts = s.split(':')
             if len(parts) == 2:
                 return int(parts[0]) * 60 + float(parts[1])
-            elif len(parts) == 3:
+            if len(parts) == 3:
                 return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
-        except ValueError:
-            return None
-    # Raw milliseconds (large integer)
-    try:
         v = float(s)
-        if v > 600000:   # >600 000 ms = >600 s, almost certainly ms
+        # Raw milliseconds
+        if v > 600000:
             return v / 1000.0
-        if v > 10000:    # >10 000 ms, probably ms
+        if v > 10000:
             return v / 1000.0
-        return v         # already seconds
-    except ValueError:
+        return v
+    except (ValueError, IndexError):
         return None
+
+
+def best_lap_from_fields(fields):
+    '''
+    From additionalFields[], find the value that looks most like a single lap time.
+    Strategy: pick the SMALLEST time that falls within plausible lap time range.
+    This correctly ignores total race time (too large) and gaps/diffs (too small).
+    '''
+    best = None
+    for f in (fields or []):
+        t = parse_time_str(f)
+        if t is None:
+            continue
+        if t < LAP_MIN_SECONDS or t > LAP_MAX_SECONDS:
+            continue
+        if best is None or t < best:
+            best = t
+    return best
 
 
 def seconds_to_lap(secs):
@@ -201,22 +209,19 @@ def seconds_to_lap(secs):
 
 
 def event_track_name(ev):
-    '''Extract track name from event - it lives at event.location.name'''
     loc = ev.get('location')
     if isinstance(loc, dict):
         return loc.get('name') or ''
     return str(loc) if loc else ''
 
 
-def event_date_str(ev):
+def event_datetime(ev):
     for key in ('startDate', 'start_date', 'date', 'eventDate'):
         val = ev.get(key)
         if val:
             try:
                 dt = datetime.fromisoformat(str(val).replace('Z', '+00:00'))
-                if dt.tzinfo is None:
-                    dt = dt.replace(tzinfo=timezone.utc)
-                return dt
+                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
             except ValueError:
                 continue
     return None
@@ -234,6 +239,7 @@ with st.expander('Advanced: Organisation Settings', expanded=False):
         help='Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX',
     )
     st.caption('Default 41593 = NASA Mid-Atlantic')
+    debug_mode = st.checkbox('Debug mode (show raw API data for first matching session)')
 
 # ---------- filters -----------------------------------------------------------
 
@@ -252,11 +258,11 @@ if track_input_mode == 'Choose from list':
     with st.spinner('Loading tracks...'):
         try:
             all_ev = fetch_all_events(org_id)
-            from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+            from_dt_list = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
             track_names = set()
             for ev in all_ev:
-                ev_dt = event_date_str(ev)
-                if ev_dt and ev_dt < from_dt:
+                ev_dt = event_datetime(ev)
+                if ev_dt and ev_dt < from_dt_list:
                     continue
                 t = event_track_name(ev)
                 if t:
@@ -277,11 +283,10 @@ else:
 class_filter = st.text_input(
     'Class / session filter', value='Spec E30',
     placeholder='e.g. Spec E30, TTD, TTA',
-    help='Matches against session name and class. Leave blank for all classes.',
+    help='Leave blank to show all classes.',
 )
 
 run_btn = st.button('FETCH GRID', use_container_width=True)
-
 if not run_btn:
     st.stop()
 
@@ -290,7 +295,7 @@ if not run_btn:
 from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
 to_dt   = datetime.combine(date_to,   datetime.max.time()).replace(tzinfo=timezone.utc)
 
-prog = st.progress(0, text='Loading events...')
+prog   = st.progress(0, text='Loading events...')
 status = st.empty()
 
 try:
@@ -302,65 +307,72 @@ except Exception as e:
 
 matching = []
 for ev in all_events:
-    track = event_track_name(ev)
+    track   = event_track_name(ev)
     ev_name = ev.get('name', '') or ''
     if track_filter and not name_matches(track, track_filter) and not name_matches(ev_name, track_filter):
         continue
-    ev_dt = event_date_str(ev)
-    if ev_dt:
-        if ev_dt < from_dt or ev_dt > to_dt:
-            continue
+    ev_dt = event_datetime(ev)
+    if ev_dt and (ev_dt < from_dt or ev_dt > to_dt):
+        continue
     matching.append(ev)
 
 if not matching:
     prog.empty()
-    st.warning(
-        'No events found for "%s" in the selected date range. '
-        'Check the track name or try "Type manually".' % (track_filter or 'all tracks')
-    )
+    st.warning('No events found for "%s" in the selected date range.' % (track_filter or 'all tracks'))
     st.stop()
 
 # ---------- scan sessions + classification ------------------------------------
 
-driver_best = {}
-total = len(matching)
+driver_best  = {}
+debug_shown  = False
+total        = len(matching)
 
 for i, ev in enumerate(matching):
-    ev_id   = ev.get('id')
-    ev_name = ev.get('name', str(ev_id)) or str(ev_id)
-    ev_dt   = event_date_str(ev)
+    ev_id    = ev.get('id')
+    ev_name  = ev.get('name', str(ev_id)) or str(ev_id)
+    ev_dt    = event_datetime(ev)
     date_str = ev_dt.date().isoformat() if ev_dt else '--'
     track    = event_track_name(ev) or ev_name
 
-    pct = int(i / total * 100)
-    prog.progress(pct, text='Scanning %d/%d: %s' % (i + 1, total, ev_name))
+    prog.progress(int(i / total * 100), text='Scanning %d/%d: %s' % (i + 1, total, ev_name))
     status.caption('%s  |  %s' % (date_str, ev_name))
 
     for sess in fetch_sessions(ev_id):
         sess_id    = sess.get('id') or sess.get('sessionId')
         sess_name  = sess.get('name', '') or ''
         sess_group = sess.get('groupName', '') or ''
-        combined   = sess_name + ' ' + sess_group
-
-        if class_filter and not name_matches(combined, class_filter):
-            continue
 
         rows = fetch_classification(sess_id)
-        for row in rows:
-            driver = row.get('name') or 'Unknown'
-            # resultClass holds the class name (e.g. 'Spec E30')
-            row_class = row.get('resultClass') or ''
-            if class_filter and not name_matches(combined + ' ' + row_class, class_filter):
-                continue
 
-            # additionalFields is a list of strings; index 0 is typically best lap
-            fields = row.get('additionalFields') or []
-            best_sec = None
-            for f in fields:
-                t = parse_lap_time(f)
-                if t and t > 10:  # sanity: ignore sub-10s values (likely not a lap)
-                    if best_sec is None or t < best_sec:
-                        best_sec = t
+        # ---- debug: show raw data for first session that has any rows ----
+        if debug_mode and not debug_shown and rows:
+            debug_shown = True
+            prog.empty()
+            status.empty()
+            st.warning('DEBUG MODE -- showing raw data for: %s / %s' % (ev_name, sess_name))
+            sample = rows[:3]
+            for r in sample:
+                st.markdown('**Driver:** `%s`' % r.get('name', '?'))
+                st.markdown('**resultClass:** `%s`' % r.get('resultClass', '?'))
+                st.markdown('**additionalFields:** `%s`' % str(r.get('additionalFields', [])))
+                st.markdown('**Full row:** `%s`' % str(r))
+                st.divider()
+            st.info('Turn off Debug mode in Advanced Settings once you have identified the class name and correct lap time field.')
+            st.stop()
+        # ------------------------------------------------------------------
+
+        for row in rows:
+            driver     = row.get('name') or 'Unknown'
+            row_class  = row.get('resultClass') or ''
+
+            # Class filter: check session name, group name, AND resultClass
+            if class_filter:
+                searchable = ' '.join([sess_name, sess_group, row_class])
+                if not name_matches(searchable, class_filter):
+                    continue
+
+            fields   = row.get('additionalFields') or []
+            best_sec = best_lap_from_fields(fields)
 
             if best_sec is None:
                 continue
@@ -384,10 +396,14 @@ status.empty()
 
 if not driver_best:
     st.warning(
-        'Events were found but no lap data matched. '
-        'Try a shorter class filter like "E30", or leave it blank to see all classes.'
+        'No lap data found matching your filters.\n\n'
+        'Tips:\n'
+        '- Enable Debug mode in Advanced Settings to see what class names and fields the API actually returns.\n'
+        '- Try leaving the class filter blank to see ALL results first.'
     )
     st.stop()
+
+# ---------- render results ----------------------------------------------------
 
 grid = sorted(driver_best.values(), key=lambda r: r['_sec'])
 
