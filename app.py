@@ -1,5 +1,5 @@
 # app.py - NASA Grid Lap Times
-# Calls the MyLaps Event Results API directly - no extra dependencies needed.
+# Streamlit web app using MyLaps Event Results API directly.
 # Deploy free at: https://streamlit.io/cloud
 
 import streamlit as st
@@ -16,10 +16,8 @@ st.set_page_config(
 st.markdown('''
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&display=swap');
-
   html, body, [class*="css"] { font-family: 'Barlow', sans-serif; }
   .stApp { background-color: #0f1117; color: #e8e8e8; }
-
   .page-header {
     background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
     border-bottom: 3px solid #e94560;
@@ -34,20 +32,14 @@ st.markdown('''
   }
   .page-header p { color: #a0aec0; font-size: 0.9rem; margin: 0; }
   .accent { color: #e94560; }
-
   .pill {
     display: inline-block; padding: 0.2rem 0.7rem;
-    border-radius: 20px; font-size: 0.78rem;
-    font-weight: 600; letter-spacing: 0.05em;
+    border-radius: 20px; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em;
   }
   .pill-success { background: #1c4532; color: #68d391; }
   .pill-warn    { background: #744210; color: #f6ad55; }
   .pill-info    { background: #1a365d; color: #63b3ed; }
-
-  .grid-table {
-    width: 100%; border-collapse: collapse;
-    font-size: 0.88rem; margin-top: 1rem;
-  }
+  .grid-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 1rem; }
   .grid-table thead tr { background: #e94560; color: white; }
   .grid-table thead th {
     font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
@@ -57,50 +49,35 @@ st.markdown('''
   .grid-table tbody tr:nth-child(even) { background: #1a1f2e; }
   .grid-table tbody tr:nth-child(odd)  { background: #151929; }
   .grid-table tbody tr:hover           { background: #0f3460; }
-  .grid-table td {
-    padding: 0.55rem 0.75rem;
-    border-bottom: 1px solid #2d3748; color: #e8e8e8;
-  }
+  .grid-table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid #2d3748; color: #e8e8e8; }
   .grid-table td.pos { color: #a0aec0; font-size: 0.82rem; width: 2rem; }
-  .grid-table td.laptime {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 1rem; color: #68d391; font-weight: 600;
-  }
+  .grid-table td.laptime { font-family: 'Barlow Condensed', sans-serif; font-size: 1rem; color: #68d391; font-weight: 600; }
   .grid-table tbody tr:first-child td.laptime { color: #f6e05e; }
   .grid-table td.meta { color: #a0aec0; font-size: 0.8rem; }
-
   div[data-testid="stButton"] > button {
-    background: #e94560 !important; color: white !important;
-    border: none !important;
+    background: #e94560 !important; color: white !important; border: none !important;
     font-family: 'Barlow Condensed', sans-serif !important;
     font-size: 1.1rem !important; font-weight: 700 !important;
     letter-spacing: 0.1em !important; text-transform: uppercase !important;
-    padding: 0.7rem 2rem !important; border-radius: 4px !important;
-    width: 100% !important; margin-top: 0.5rem !important;
+    padding: 0.7rem 2rem !important; border-radius: 4px !important; width: 100% !important;
   }
   div[data-testid="stDownloadButton"] > button {
     background: #2d3748 !important; color: #e8e8e8 !important;
     border: 1px solid #4a5568 !important;
     font-family: 'Barlow Condensed', sans-serif !important;
     font-size: 0.9rem !important; font-weight: 600 !important;
-    letter-spacing: 0.06em !important; text-transform: uppercase !important;
-    width: 100% !important;
+    letter-spacing: 0.06em !important; text-transform: uppercase !important; width: 100% !important;
   }
   div[data-testid="stSelectbox"] label,
   div[data-testid="stDateInput"] label,
   div[data-testid="stTextInput"] label,
   div[data-testid="stNumberInput"] label,
   div[data-testid="stRadio"] label {
-    color: #a0aec0 !important;
-    font-family: 'Barlow Condensed', sans-serif !important;
+    color: #a0aec0 !important; font-family: 'Barlow Condensed', sans-serif !important;
     font-size: 0.75rem !important; font-weight: 600 !important;
     letter-spacing: 0.1em !important; text-transform: uppercase !important;
   }
-  div[data-testid="stExpander"] {
-    background: #1a1f2e !important;
-    border: 1px solid #2d3748 !important;
-    border-radius: 6px !important;
-  }
+  div[data-testid="stExpander"] { background: #1a1f2e !important; border: 1px solid #2d3748 !important; border-radius: 6px !important; }
   footer { visibility: hidden; }
 </style>
 ''', unsafe_allow_html=True)
@@ -113,86 +90,107 @@ st.markdown('''
 ''', unsafe_allow_html=True)
 
 
-# ---------- API client -------------------------------------------------------
+# ---------- API ---------------------------------------------------------------
+# Base: https://eventresults-api.speedhive.com
+# Key endpoints (from official Go client source):
+#   GET /organizations/{id}/events?count=N&offset=N
+#     -> Event[] where event.location.name = track name, event.startDate = date
+#   GET /events/{id}/sessions
+#     -> Session[] where session.name/groupName = session name
+#   GET /sessions/{id}/classification
+#     -> { rows: IRunRow[], classes: string[] }
+#       IRunRow: { name (driver), resultClass, additionalFields: [bestLap, ...] }
 
-BASE_URL = 'https://eventresults-api.speedhive.com'
-HEADERS = {
-    'Origin': 'https://sporthive.com',
-    'Accept': 'application/json',
-}
+BASE = 'https://eventresults-api.speedhive.com'
+HEADERS = {'Origin': 'https://sporthive.com', 'Accept': 'application/json'}
 
 
 def api_get(path, params=None):
-    url = BASE_URL + path
-    resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
-    resp.raise_for_status()
-    return resp.json()
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_events(org_id, page=0, size=100):
-    return api_get('/v1/events', params={'organizationId': org_id, 'page': page, 'size': size})
+    r = requests.get(BASE + path, headers=HEADERS, params=params, timeout=15)
+    r.raise_for_status()
+    return r.json()
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_all_events(org_id):
-    all_events = []
-    page = 0
+    events = []
+    offset = 0
+    page_size = 100
     while True:
-        data = fetch_events(org_id, page=page, size=100)
-        # handle both list response and paginated response
-        if isinstance(data, list):
-            batch = data
-        else:
-            batch = data.get('content') or data.get('events') or data.get('items') or data.get('data') or []
+        batch = api_get(
+            '/organizations/%d/events' % org_id,
+            params={'count': page_size, 'offset': offset}
+        )
+        if not isinstance(batch, list):
+            batch = batch.get('events') or batch.get('content') or batch.get('data') or []
         if not batch:
             break
-        all_events.extend(batch)
-        # stop if we got a partial page (last page)
-        if len(batch) < 100:
+        events.extend(batch)
+        if len(batch) < page_size:
             break
-        page += 1
-    return all_events
+        offset += page_size
+    return events
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def fetch_sessions(event_id):
     try:
-        data = api_get('/v1/events/%s/sessions' % event_id)
+        data = api_get('/events/%d/sessions' % event_id)
+        # Response may be a SessionGrouping: { sessions: [], groups: [] }
+        # or a flat list
         if isinstance(data, list):
             return data
-        return data.get('sessions') or data.get('content') or data.get('data') or []
+        # Flatten sessions from groups recursively
+        sessions = list(data.get('sessions') or [])
+        def flatten_groups(groups):
+            for g in (groups or []):
+                sessions.extend(g.get('sessions') or [])
+                flatten_groups(g.get('subGroups') or [])
+        flatten_groups(data.get('groups') or [])
+        return sessions
     except Exception:
         return []
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def fetch_results(session_id):
+def fetch_classification(session_id):
     try:
-        data = api_get('/v1/sessions/%s/results' % session_id)
+        data = api_get('/sessions/%d/classification' % session_id)
         if isinstance(data, list):
             return data
-        return data.get('results') or data.get('content') or data.get('data') or []
+        return data.get('rows') or []
     except Exception:
         return []
 
 
-# ---------- helpers ----------------------------------------------------------
+# ---------- helpers -----------------------------------------------------------
 
-def lap_to_seconds(lap_time):
-    if not lap_time:
+def parse_lap_time(value):
+    '''Convert various lap time formats to total seconds. Returns None if unparseable.'''
+    if value is None:
         return None
+    s = str(value).strip()
+    if not s or s in ('-', 'DNS', 'DNF', 'DQ', ''):
+        return None
+    # Format: M:SS.mmm or H:MM:SS.mmm
+    if ':' in s:
+        parts = s.split(':')
+        try:
+            if len(parts) == 2:
+                return int(parts[0]) * 60 + float(parts[1])
+            elif len(parts) == 3:
+                return int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
+        except ValueError:
+            return None
+    # Raw milliseconds (large integer)
     try:
-        s = str(lap_time).strip()
-        if ':' in s:
-            m, sec = s.split(':', 1)
-            return int(m) * 60 + float(sec)
         v = float(s)
-        # raw milliseconds if value is very large
-        if v > 10000:
+        if v > 600000:   # >600 000 ms = >600 s, almost certainly ms
             return v / 1000.0
-        return v
-    except (ValueError, AttributeError):
+        if v > 10000:    # >10 000 ms, probably ms
+            return v / 1000.0
+        return v         # already seconds
+    except ValueError:
         return None
 
 
@@ -202,42 +200,42 @@ def seconds_to_lap(secs):
     return '%d:%06.3f' % (m, s)
 
 
-def parse_event_date(ev):
-    for key in ('date', 'startDate', 'start_date', 'eventDate', 'event_date', 'eventStart'):
+def event_track_name(ev):
+    '''Extract track name from event - it lives at event.location.name'''
+    loc = ev.get('location')
+    if isinstance(loc, dict):
+        return loc.get('name') or ''
+    return str(loc) if loc else ''
+
+
+def event_date_str(ev):
+    for key in ('startDate', 'start_date', 'date', 'eventDate'):
         val = ev.get(key)
         if val:
             try:
                 dt = datetime.fromisoformat(str(val).replace('Z', '+00:00'))
-                return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return dt
             except ValueError:
                 continue
     return None
 
 
-def name_matches(name, query):
-    return query.strip().lower() in (name or '').lower()
+def name_matches(text, query):
+    return query.strip().lower() in (text or '').lower()
 
 
-def get_field(d, *keys):
-    for k in keys:
-        v = d.get(k)
-        if v is not None and v != '':
-            return v
-    return None
-
-
-# ---------- org config -------------------------------------------------------
+# ---------- advanced settings -------------------------------------------------
 
 with st.expander('Advanced: Organisation Settings', expanded=False):
     org_id = st.number_input(
-        'Speedhive Org ID',
-        min_value=1, value=41593, step=1,
+        'Speedhive Org ID', min_value=1, value=41593, step=1,
         help='Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX',
     )
     st.caption('Default 41593 = NASA Mid-Atlantic')
 
-
-# ---------- filters ----------------------------------------------------------
+# ---------- filters -----------------------------------------------------------
 
 st.markdown('#### Filters')
 
@@ -247,38 +245,39 @@ with col_a:
 with col_b:
     date_to = st.date_input('To', value=date.today())
 
-track_input_mode = st.radio(
-    'Track selection', ['Choose from list', 'Type manually'], horizontal=True
-)
+track_input_mode = st.radio('Track selection', ['Choose from list', 'Type manually'], horizontal=True)
 
 track_filter = ''
 if track_input_mode == 'Choose from list':
     with st.spinner('Loading tracks...'):
         try:
-            all_events_for_list = fetch_all_events(org_id)
-            cutoff_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+            all_ev = fetch_all_events(org_id)
+            from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
             track_names = set()
-            for ev in all_events_for_list:
-                ev_date = parse_event_date(ev)
-                if ev_date and ev_date < cutoff_dt:
+            for ev in all_ev:
+                ev_dt = event_date_str(ev)
+                if ev_dt and ev_dt < from_dt:
                     continue
-                loc = ev.get('location') or ev.get('venue') or ev.get('name') or ''
-                if loc:
-                    track_names.add(loc.strip())
+                t = event_track_name(ev)
+                if t:
+                    track_names.add(t)
             track_list = sorted(track_names)
-            choice = st.selectbox('Track', ['(all tracks)'] + track_list)
-            track_filter = '' if choice == '(all tracks)' else choice
+            if track_list:
+                choice = st.selectbox('Track', ['(all tracks)'] + track_list)
+                track_filter = '' if choice == '(all tracks)' else choice
+            else:
+                st.warning('No tracks found -- try "Type manually" or check the Org ID.')
+                track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina')
         except Exception as e:
             st.error('Could not load tracks: %s' % e)
-            track_filter = st.text_input('Track name fragment')
+            track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina')
 else:
     track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina')
 
 class_filter = st.text_input(
-    'Class / session filter',
-    value='Spec E30',
+    'Class / session filter', value='Spec E30',
     placeholder='e.g. Spec E30, TTD, TTA',
-    help='Leave blank to show all classes',
+    help='Matches against session name and class. Leave blank for all classes.',
 )
 
 run_btn = st.button('FETCH GRID', use_container_width=True)
@@ -286,108 +285,111 @@ run_btn = st.button('FETCH GRID', use_container_width=True)
 if not run_btn:
     st.stop()
 
-
-# ---------- run query --------------------------------------------------------
+# ---------- fetch + filter events --------------------------------------------
 
 from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
 to_dt   = datetime.combine(date_to,   datetime.max.time()).replace(tzinfo=timezone.utc)
 
-progress_bar = st.progress(0, text='Loading events...')
-status_text  = st.empty()
+prog = st.progress(0, text='Loading events...')
+status = st.empty()
 
 try:
     all_events = fetch_all_events(org_id)
 except Exception as e:
-    progress_bar.empty()
+    prog.empty()
     st.error('Could not connect to Speedhive API: %s' % e)
     st.stop()
 
-if not all_events:
-    progress_bar.empty()
-    st.error(
-        'No events returned from the API for org %d. '
-        'Double-check the Org ID in Advanced Settings.' % org_id
-    )
-    st.stop()
-
-matching_events = []
+matching = []
 for ev in all_events:
+    track = event_track_name(ev)
     ev_name = ev.get('name', '') or ''
-    ev_loc  = ev.get('location', '') or ev.get('venue', '') or ''
-    combined = ev_name + ' ' + ev_loc
-    if track_filter and not name_matches(combined, track_filter):
+    if track_filter and not name_matches(track, track_filter) and not name_matches(ev_name, track_filter):
         continue
-    ev_date = parse_event_date(ev)
-    if ev_date:
-        if ev_date < from_dt or ev_date > to_dt:
+    ev_dt = event_date_str(ev)
+    if ev_dt:
+        if ev_dt < from_dt or ev_dt > to_dt:
             continue
-    matching_events.append(ev)
+    matching.append(ev)
 
-if not matching_events:
-    progress_bar.empty()
+if not matching:
+    prog.empty()
     st.warning(
-        'No events found for "%s" between %s and %s. '
-        'Try a shorter name fragment or switch to Type manually.'
-        % (track_filter or 'all tracks', date_from, date_to)
+        'No events found for "%s" in the selected date range. '
+        'Check the track name or try "Type manually".' % (track_filter or 'all tracks')
     )
     st.stop()
+
+# ---------- scan sessions + classification ------------------------------------
 
 driver_best = {}
-total = len(matching_events)
+total = len(matching)
 
-for i, ev in enumerate(matching_events):
-    ev_id    = ev.get('id')
-    ev_name  = ev.get('name', str(ev_id))
-    ev_date  = parse_event_date(ev)
-    date_str = ev_date.date().isoformat() if ev_date else '--'
+for i, ev in enumerate(matching):
+    ev_id   = ev.get('id')
+    ev_name = ev.get('name', str(ev_id)) or str(ev_id)
+    ev_dt   = event_date_str(ev)
+    date_str = ev_dt.date().isoformat() if ev_dt else '--'
+    track    = event_track_name(ev) or ev_name
 
-    pct = int((i / total) * 100)
-    progress_bar.progress(pct, text='Scanning: %s (%d/%d)' % (ev_name, i + 1, total))
-    status_text.caption('%s  |  %s' % (date_str, ev_name))
+    pct = int(i / total * 100)
+    prog.progress(pct, text='Scanning %d/%d: %s' % (i + 1, total, ev_name))
+    status.caption('%s  |  %s' % (date_str, ev_name))
 
-    sessions = fetch_sessions(ev_id)
-    for sess in sessions:
-        sess_id    = sess.get('id')
+    for sess in fetch_sessions(ev_id):
+        sess_id    = sess.get('id') or sess.get('sessionId')
         sess_name  = sess.get('name', '') or ''
-        sess_class = (
-            sess.get('class') or sess.get('className') or
-            sess.get('class_name') or sess.get('group') or ''
-        )
-        combined_sess = sess_name + ' ' + sess_class
-        if class_filter and not name_matches(combined_sess, class_filter):
+        sess_group = sess.get('groupName', '') or ''
+        combined   = sess_name + ' ' + sess_group
+
+        if class_filter and not name_matches(combined, class_filter):
             continue
 
-        results = fetch_results(sess_id)
-        for entry in results:
-            driver   = get_field(entry, 'driver', 'driverName', 'driver_name', 'name') or 'Unknown'
-            best_raw = get_field(entry, 'bestLap', 'best_lap', 'bestLapTime', 'best_lap_time', 'fastestLap')
-            best_sec = lap_to_seconds(best_raw)
+        rows = fetch_classification(sess_id)
+        for row in rows:
+            driver = row.get('name') or 'Unknown'
+            # resultClass holds the class name (e.g. 'Spec E30')
+            row_class = row.get('resultClass') or ''
+            if class_filter and not name_matches(combined + ' ' + row_class, class_filter):
+                continue
+
+            # additionalFields is a list of strings; index 0 is typically best lap
+            fields = row.get('additionalFields') or []
+            best_sec = None
+            for f in fields:
+                t = parse_lap_time(f)
+                if t and t > 10:  # sanity: ignore sub-10s values (likely not a lap)
+                    if best_sec is None or t < best_sec:
+                        best_sec = t
+
             if best_sec is None:
                 continue
+
             existing = driver_best.get(driver)
-            if existing is None or best_sec < existing['_seconds']:
+            if existing is None or best_sec < existing['_sec']:
                 driver_best[driver] = {
                     'Driver':   driver,
+                    'Class':    row_class,
                     'Best Lap': seconds_to_lap(best_sec),
-                    '_seconds': best_sec,
+                    '_sec':     best_sec,
                     'Event':    ev_name,
+                    'Track':    track,
                     'Session':  sess_name,
                     'Date':     date_str,
                 }
 
-progress_bar.progress(100, text='Done!')
-progress_bar.empty()
-status_text.empty()
+prog.progress(100, text='Done!')
+prog.empty()
+status.empty()
 
 if not driver_best:
     st.warning(
-        'Events were found but no lap data matched class "%s". '
-        'Try a shorter fragment like "E30", or leave blank for all classes.'
-        % class_filter
+        'Events were found but no lap data matched. '
+        'Try a shorter class filter like "E30", or leave it blank to see all classes.'
     )
     st.stop()
 
-grid = sorted(driver_best.values(), key=lambda r: r['_seconds'])
+grid = sorted(driver_best.values(), key=lambda r: r['_sec'])
 
 track_label = track_filter or 'All Tracks'
 class_label = class_filter or 'All Classes'
@@ -416,12 +418,7 @@ for pos, row in enumerate(grid, 1):
 
 st.markdown('''
 <table class="grid-table">
-  <thead>
-    <tr>
-      <th>#</th><th>Driver</th><th>Best Lap</th>
-      <th>Event</th><th>Date</th>
-    </tr>
-  </thead>
+  <thead><tr><th>#</th><th>Driver</th><th>Best Lap</th><th>Event</th><th>Date</th></tr></thead>
   <tbody>%s</tbody>
 </table>
 ''' % rows_html, unsafe_allow_html=True)
@@ -429,26 +426,19 @@ st.markdown('''
 st.markdown('<br>', unsafe_allow_html=True)
 
 df = pd.DataFrame([
-    {
-        'Position': pos,
-        'Driver':   r['Driver'],
-        'Best Lap': r['Best Lap'],
-        'Event':    r['Event'],
-        'Session':  r['Session'],
-        'Date':     r['Date'],
-    }
+    {'Position': pos, 'Driver': r['Driver'], 'Class': r['Class'],
+     'Best Lap': r['Best Lap'], 'Event': r['Event'], 'Track': r['Track'],
+     'Session': r['Session'], 'Date': r['Date']}
     for pos, r in enumerate(grid, 1)
 ])
 
-csv_bytes = df.to_csv(index=False).encode('utf-8')
 fname = 'grid_%s_%s.csv' % (
     (track_filter or 'all').replace(' ', '_'),
     (class_filter or 'all').replace(' ', '_'),
 )
-
 st.download_button(
     label='Download CSV (open in Excel)',
-    data=csv_bytes,
+    data=df.to_csv(index=False).encode('utf-8'),
     file_name=fname,
     mime='text/csv',
     use_container_width=True,
