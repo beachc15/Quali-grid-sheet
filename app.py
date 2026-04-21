@@ -1,9 +1,10 @@
 # app.py - NASA Grid Lap Times
-# Streamlit web app: select track, class, and date range
+# Calls the MyLaps Event Results API directly - no extra dependencies needed.
 # Deploy free at: https://streamlit.io/cloud
 
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime, timedelta, timezone, date
 
 st.set_page_config(
@@ -12,7 +13,7 @@ st.set_page_config(
     layout='centered',
 )
 
-st.markdown("""
+st.markdown('''
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&display=swap');
 
@@ -33,13 +34,6 @@ st.markdown("""
   }
   .page-header p { color: #a0aec0; font-size: 0.9rem; margin: 0; }
   .accent { color: #e94560; }
-
-  .section-label {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 0.72rem; font-weight: 600;
-    letter-spacing: 0.12em; text-transform: uppercase;
-    color: #e94560; margin-bottom: 0.3rem;
-  }
 
   .pill {
     display: inline-block; padding: 0.2rem 0.7rem;
@@ -109,16 +103,78 @@ st.markdown("""
   }
   footer { visibility: hidden; }
 </style>
-""", unsafe_allow_html=True)
+''', unsafe_allow_html=True)
 
-# ---------- header -----------------------------------------------------------
-
-st.markdown("""
+st.markdown('''
 <div class="page-header">
   <h1>NASA <span class="accent">Grid</span> Laps</h1>
   <p>Fastest lap per driver -- sorted for race day grid lineup</p>
 </div>
-""", unsafe_allow_html=True)
+''', unsafe_allow_html=True)
+
+
+# ---------- API client -------------------------------------------------------
+
+BASE_URL = 'https://eventresults-api.speedhive.com'
+HEADERS = {
+    'Origin': 'https://sporthive.com',
+    'Accept': 'application/json',
+}
+
+
+def api_get(path, params=None):
+    url = BASE_URL + path
+    resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
+    resp.raise_for_status()
+    return resp.json()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_events(org_id, page=0, size=100):
+    return api_get('/v1/events', params={'organizationId': org_id, 'page': page, 'size': size})
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_all_events(org_id):
+    all_events = []
+    page = 0
+    while True:
+        data = fetch_events(org_id, page=page, size=100)
+        # handle both list response and paginated response
+        if isinstance(data, list):
+            batch = data
+        else:
+            batch = data.get('content') or data.get('events') or data.get('items') or data.get('data') or []
+        if not batch:
+            break
+        all_events.extend(batch)
+        # stop if we got a partial page (last page)
+        if len(batch) < 100:
+            break
+        page += 1
+    return all_events
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_sessions(event_id):
+    try:
+        data = api_get('/v1/events/%s/sessions' % event_id)
+        if isinstance(data, list):
+            return data
+        return data.get('sessions') or data.get('content') or data.get('data') or []
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_results(session_id):
+    try:
+        data = api_get('/v1/sessions/%s/results' % session_id)
+        if isinstance(data, list):
+            return data
+        return data.get('results') or data.get('content') or data.get('data') or []
+    except Exception:
+        return []
 
 
 # ---------- helpers ----------------------------------------------------------
@@ -131,7 +187,11 @@ def lap_to_seconds(lap_time):
         if ':' in s:
             m, sec = s.split(':', 1)
             return int(m) * 60 + float(sec)
-        return float(s)
+        v = float(s)
+        # raw milliseconds if value is very large
+        if v > 10000:
+            return v / 1000.0
+        return v
     except (ValueError, AttributeError):
         return None
 
@@ -143,7 +203,7 @@ def seconds_to_lap(secs):
 
 
 def parse_event_date(ev):
-    for key in ('date', 'startDate', 'start_date', 'eventDate', 'event_date'):
+    for key in ('date', 'startDate', 'start_date', 'eventDate', 'event_date', 'eventStart'):
         val = ev.get(key)
         if val:
             try:
@@ -155,44 +215,18 @@ def parse_event_date(ev):
 
 
 def name_matches(name, query):
-    return query.strip().lower() in name.lower()
+    return query.strip().lower() in (name or '').lower()
 
 
 def get_field(d, *keys):
     for k in keys:
         v = d.get(k)
-        if v:
+        if v is not None and v != '':
             return v
     return None
 
 
-# ---------- cached API calls -------------------------------------------------
-
-@st.cache_resource(show_spinner=False)
-def get_client():
-    from mylaps_client_wrapper import SpeedhiveClient
-    return SpeedhiveClient()
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_all_events(org_id):
-    client = get_client()
-    return list(client.iter_events(org_id))
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_sessions(event_id):
-    client = get_client()
-    return client.get_sessions(event_id) or []
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def fetch_results(session_id):
-    client = get_client()
-    return client.get_results(session_id) or []
-
-
-# ---------- org config (collapsible, advanced) -------------------------------
+# ---------- org config -------------------------------------------------------
 
 with st.expander('Advanced: Organisation Settings', expanded=False):
     org_id = st.number_input(
@@ -203,7 +237,7 @@ with st.expander('Advanced: Organisation Settings', expanded=False):
     st.caption('Default 41593 = NASA Mid-Atlantic')
 
 
-# ---------- main filters (always visible) ------------------------------------
+# ---------- filters ----------------------------------------------------------
 
 st.markdown('#### Filters')
 
@@ -238,10 +272,7 @@ if track_input_mode == 'Choose from list':
             st.error('Could not load tracks: %s' % e)
             track_filter = st.text_input('Track name fragment')
 else:
-    track_filter = st.text_input(
-        'Track name fragment',
-        placeholder='e.g. Carolina',
-    )
+    track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina')
 
 class_filter = st.text_input(
     'Class / session filter',
@@ -267,7 +298,16 @@ status_text  = st.empty()
 try:
     all_events = fetch_all_events(org_id)
 except Exception as e:
+    progress_bar.empty()
     st.error('Could not connect to Speedhive API: %s' % e)
+    st.stop()
+
+if not all_events:
+    progress_bar.empty()
+    st.error(
+        'No events returned from the API for org %d. '
+        'Double-check the Org ID in Advanced Settings.' % org_id
+    )
     st.stop()
 
 matching_events = []
@@ -286,8 +326,8 @@ for ev in all_events:
 if not matching_events:
     progress_bar.empty()
     st.warning(
-        "No events found for '%s' between %s and %s. "
-        "Try a shorter name fragment or switch to 'Type manually'."
+        'No events found for "%s" between %s and %s. '
+        'Try a shorter name fragment or switch to Type manually.'
         % (track_filter or 'all tracks', date_from, date_to)
     )
     st.stop()
@@ -305,11 +345,7 @@ for i, ev in enumerate(matching_events):
     progress_bar.progress(pct, text='Scanning: %s (%d/%d)' % (ev_name, i + 1, total))
     status_text.caption('%s  |  %s' % (date_str, ev_name))
 
-    try:
-        sessions = fetch_sessions(ev_id)
-    except Exception:
-        continue
-
+    sessions = fetch_sessions(ev_id)
     for sess in sessions:
         sess_id    = sess.get('id')
         sess_name  = sess.get('name', '') or ''
@@ -321,14 +357,10 @@ for i, ev in enumerate(matching_events):
         if class_filter and not name_matches(combined_sess, class_filter):
             continue
 
-        try:
-            results = fetch_results(sess_id)
-        except Exception:
-            continue
-
+        results = fetch_results(sess_id)
         for entry in results:
             driver   = get_field(entry, 'driver', 'driverName', 'driver_name', 'name') or 'Unknown'
-            best_raw = get_field(entry, 'bestLap', 'best_lap', 'bestLapTime', 'best_lap_time')
+            best_raw = get_field(entry, 'bestLap', 'best_lap', 'bestLapTime', 'best_lap_time', 'fastestLap')
             best_sec = lap_to_seconds(best_raw)
             if best_sec is None:
                 continue
@@ -349,42 +381,40 @@ status_text.empty()
 
 if not driver_best:
     st.warning(
-        "Events were found but no lap data matched class '%s'. "
-        "Try a shorter fragment like 'E30', or leave blank for all classes."
+        'Events were found but no lap data matched class "%s". '
+        'Try a shorter fragment like "E30", or leave blank for all classes.'
         % class_filter
     )
     st.stop()
 
 grid = sorted(driver_best.values(), key=lambda r: r['_seconds'])
 
-# summary pills
 track_label = track_filter or 'All Tracks'
 class_label = class_filter or 'All Classes'
 date_label  = '%s to %s' % (date_from, date_to)
 
-st.markdown("""
+st.markdown('''
 <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin:1rem 0;">
   <span class="pill pill-info">%s</span>
   <span class="pill pill-success">%s</span>
   <span class="pill pill-warn">%s</span>
   <span class="pill pill-info">%d drivers</span>
 </div>
-""" % (track_label, class_label, date_label, len(grid)), unsafe_allow_html=True)
+''' % (track_label, class_label, date_label, len(grid)), unsafe_allow_html=True)
 
-# results table
 rows_html = ''
 for pos, row in enumerate(grid, 1):
     rows_html += (
         '<tr>'
-        "<td class='pos'>%d</td>"
+        '<td class="pos">%d</td>'
         '<td><strong>%s</strong></td>'
-        "<td class='laptime'>%s</td>"
-        "<td class='meta'>%s</td>"
-        "<td class='meta'>%s</td>"
+        '<td class="laptime">%s</td>'
+        '<td class="meta">%s</td>'
+        '<td class="meta">%s</td>'
         '</tr>'
     ) % (pos, row['Driver'], row['Best Lap'], row['Event'], row['Date'])
 
-st.markdown("""
+st.markdown('''
 <table class="grid-table">
   <thead>
     <tr>
@@ -394,11 +424,10 @@ st.markdown("""
   </thead>
   <tbody>%s</tbody>
 </table>
-""" % rows_html, unsafe_allow_html=True)
+''' % rows_html, unsafe_allow_html=True)
 
 st.markdown('<br>', unsafe_allow_html=True)
 
-# CSV download
 df = pd.DataFrame([
     {
         'Position': pos,
