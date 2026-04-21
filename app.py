@@ -423,6 +423,7 @@ for i, ev in enumerate(matching):
         # ------------------------------------------------------------------
 
         # Get results from classification endpoint
+        # Best lap time is in row['bestTime'] as a string e.g. '01:21.912'
         rows = fetch_classification(sess_id)
         for row in rows:
             driver    = row.get('name') or 'Unknown'
@@ -433,9 +434,8 @@ for i, ev in enumerate(matching):
                    not name_matches(sess_name + ' ' + sess_group, class_filter):
                     continue
 
-            fields   = row.get('additionalFields') or []
-            best_sec = best_lap_from_fields(fields, min_sec=30.0, max_sec=900.0)
-            if best_sec is None:
+            best_sec = parse_time_str(row.get('bestTime'))
+            if best_sec is None or best_sec < 30.0:
                 continue
 
             existing = driver_best.get(driver)
