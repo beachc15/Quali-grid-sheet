@@ -1,3 +1,3 @@
 streamlit>=1.35.0
-speedhive-tools>=0.1.8
+speedhive-tools>=0.1.7
 pandas>=2.0.0
