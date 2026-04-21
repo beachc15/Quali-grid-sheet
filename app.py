@@ -1,17 +1,17 @@
-'''
-app.py — NASA Grid Lap Times
+“””
+app.py – NASA Grid Lap Times
 Streamlit web app: select track, class, and date range to get a
 copy-pasteable fastest-lap grid table.
 
 Deploy free at: https://streamlit.io/cloud
-'''
+“””
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta, timezone, date
 from collections import defaultdict
 
-# ── page config (must be first Streamlit call) ────────────────────────────────
+# – page config (must be first Streamlit call) ––––––––––––––––
 
 st.set_page_config(
 page_title=“NASA Grid Laps”,
@@ -19,7 +19,7 @@ page_icon=“🏁”,
 layout=“centered”,
 )
 
-# ── custom CSS ────────────────────────────────────────────────────────────────
+# – custom CSS ––––––––––––––––––––––––––––––––
 
 st.markdown(”””
 
@@ -174,17 +174,17 @@ st.markdown(”””
 
 “””, unsafe_allow_html=True)
 
-# ── header ────────────────────────────────────────────────────────────────────
+# – header ––––––––––––––––––––––––––––––––––
 
 st.markdown(”””
 
 <div class="nasa-header">
   <h1>🏁 NASA <span class="accent">Grid</span> Laps</h1>
-  <p>Fastest lap times per driver — sorted for race day grid lineup</p>
+  <p>Fastest lap times per driver -- sorted for race day grid lineup</p>
 </div>
 """, unsafe_allow_html=True)
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# – helpers —————————————————————––
 
 def lap_to_seconds(lap_time) -> float | None:
 if not lap_time:
@@ -224,7 +224,7 @@ if v:
 return v
 return None
 
-# ── cached API calls ──────────────────────────────────────────────────────────
+# – cached API calls –––––––––––––––––––––––––––––
 
 @st.cache_resource(show_spinner=False)
 def get_client():
@@ -246,10 +246,10 @@ def fetch_results(session_id) -> list[dict]:
 client = get_client()
 return client.get_results(session_id) or []
 
-# ── sidebar — org config ──────────────────────────────────────────────────────
+# – sidebar – org config ——————————————————
 
 with st.sidebar:
-st.markdown(”### ⚙️ Organisation”)
+st.markdown(”### ⚙ Organisation”)
 org_id = st.number_input(
 “Speedhive Org ID”,
 min_value=1,
@@ -275,7 +275,7 @@ track_input_mode = st.radio(
 )
 
 if track_input_mode == "Choose from list":
-    with st.spinner("Loading tracks…"):
+    with st.spinner("Loading tracks..."):
         try:
             all_events = fetch_all_events(org_id)
             cutoff_dt  = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
@@ -311,12 +311,12 @@ class_filter = st.text_input(
 run_btn = st.button("🏁  FETCH GRID", use_container_width=True)
 ```
 
-# ── main content ──────────────────────────────────────────────────────────────
+# – main content –––––––––––––––––––––––––––––––
 
 if not run_btn:
 st.markdown(”””
 <div style="text-align:center; padding: 4rem 2rem; color: #4a5568;">
-<div style="font-size: 3rem; margin-bottom: 1rem;">🏎️</div>
+<div style="font-size: 3rem; margin-bottom: 1rem;">🏎</div>
 <div style="font-family: 'Barlow Condensed', sans-serif; font-size: 1.2rem;
 letter-spacing: 0.08em; text-transform: uppercase; color: #718096;">
 Select your filters and click Fetch Grid
@@ -325,7 +325,7 @@ Select your filters and click Fetch Grid
 “””, unsafe_allow_html=True)
 st.stop()
 
-# ── run the query ─────────────────────────────────────────────────────────────
+# – run the query ———————————————————––
 
 from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
 to_dt   = datetime.combine(date_to,   datetime.max.time()).replace(tzinfo=timezone.utc)
@@ -372,12 +372,12 @@ for i, ev in enumerate(matching_events):
 ev_id   = ev.get(“id”)
 ev_name = ev.get(“name”, str(ev_id))
 ev_date = parse_event_date(ev)
-date_str = ev_date.date().isoformat() if ev_date else “—”
+date_str = ev_date.date().isoformat() if ev_date else “–”
 
 ```
 pct = int((i / total) * 100)
 progress_bar.progress(pct, text=f"Scanning: {ev_name} ({i+1}/{total})")
-status_text.caption(f"📅 {date_str} — {ev_name}")
+status_text.caption(f"📅 {date_str} -- {ev_name}")
 
 try:
     sessions = fetch_sessions(ev_id)
@@ -423,7 +423,7 @@ progress_bar.progress(100, text=“Done!”)
 progress_bar.empty()
 status_text.empty()
 
-# ── render results ────────────────────────────────────────────────────────────
+# – render results ————————————————————
 
 if not driver_best:
 st.warning(
@@ -438,7 +438,7 @@ grid = sorted(driver_best.values(), key=lambda r: r[”_seconds”])
 
 track_label = track_filter or “All Tracks”
 class_label = class_filter or “All Classes”
-date_label  = f”{date_from} → {date_to}”
+date_label  = f”{date_from} -> {date_to}”
 
 st.markdown(f”””
 
@@ -503,7 +503,7 @@ fname = f”grid_{(track_filter or ‘all’).replace(’ ‘,’*’)}*{(class_
 col1, col2 = st.columns([2, 1])
 with col1:
 st.download_button(
-label=“⬇️  Download CSV (open in Excel)”,
+label=“⬇  Download CSV (open in Excel)”,
 data=csv_bytes,
 file_name=fname,
 mime=“text/csv”,
