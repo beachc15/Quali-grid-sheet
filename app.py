@@ -398,54 +398,53 @@ for i, ev in enumerate(matching):
         sess_n = sess_name.strip().lower()
         sess_g = sess_group.strip().lower()
         is_lightning_race = sess_n.startswith('lightning race') or sess_g.startswith('lightning race')
-        if not debug_mode and not is_lightning_race:
+        if not is_lightning_race:
             continue
 
-        # ---- debug: show raw API response for first session ---------------
+        # ---- debug: show classification rows from first lightning race -----
         if debug_mode and not debug_shown:
-            debug_shown = True
-            prog.empty()
-            status.empty()
-            st.warning('DEBUG MODE -- Session: **%s** | Group: **%s**' % (sess_name, sess_group))
-            st.markdown('**sess_name repr:** `%s`' % repr(sess_name))
-            st.markdown('**sess_group repr:** `%s`' % repr(sess_group))
-            st.markdown('**is_lightning_race:** `%s`' % is_lightning_race)
-            # Show raw lapdata API response
-            try:
-                raw = api_get('/sessions/%d/lapdata' % sess_id, params={'count': 10, 'offset': 0})
-                st.markdown('**Raw /lapdata response type:** `%s`' % type(raw).__name__)
-                if isinstance(raw, dict):
-                    st.markdown('**Top-level keys:** `%s`' % list(raw.keys()))
-                    lap_data_info = raw.get('lapDataInfo') or {}
-                    st.markdown('**lapDataInfo:** `%s`' % lap_data_info)
-                    laps = raw.get('laps') or []
-                    st.markdown('**laps count:** `%d`' % len(laps))
-                    if laps:
-                        st.markdown('**First lap keys:** `%s`' % list(laps[0].keys()))
-                        st.markdown('**First lap:** `%s`' % laps[0])
-                elif isinstance(raw, list):
-                    st.markdown('**List length:** `%d`' % len(raw))
-                    if raw:
-                        st.markdown('**First item keys:** `%s`' % list(raw[0].keys()) if isinstance(raw[0], dict) else str(raw[0]))
-                else:
-                    st.markdown('**Raw value:** `%s`' % str(raw))
-            except Exception as ex:
-                st.error('lapdata API call failed: %s' % ex)
-            st.info('Turn off Debug mode once you understand the structure.')
-            st.stop()
+            rows_dbg = fetch_classification(sess_id)
+            if rows_dbg:
+                debug_shown = True
+                prog.empty()
+                status.empty()
+                st.warning('DEBUG MODE -- Lightning race session: **%s** | Group: **%s**' % (sess_name, sess_group))
+                st.markdown('**Total rows:** `%d`' % len(rows_dbg))
+                for r in rows_dbg[:5]:
+                    raw_fields = r.get('additionalFields') or []
+                    parsed = []
+                    for f in raw_fields:
+                        t = parse_time_str(f)
+                        parsed.append('%s -> %s' % (repr(f), ('%.3fs' % t) if t else 'None'))
+                    st.markdown('**Driver:** `%s` | **Class:** `%s`' % (r.get('name','?'), repr(r.get('resultClass',''))))
+                    st.markdown('**additionalFields:** `%s`' % str(raw_fields))
+                    st.markdown('**Parsed:** `%s`' % str(parsed))
+                    st.divider()
+                st.info('Turn off Debug mode once you can see which additionalField index holds the best lap time.')
+                st.stop()
         # ------------------------------------------------------------------
 
-        # Use lapdata endpoint -- additionalFields has car metadata, not lap times
-        for (driver, lap_class, best_sec) in fetch_lapdata(sess_id):
+        # Get results from classification endpoint
+        rows = fetch_classification(sess_id)
+        for row in rows:
+            driver    = row.get('name') or 'Unknown'
+            row_class = (row.get('resultClass') or '').strip()
+
             if class_filter:
-                if not name_matches(lap_class, class_filter) and \
+                if not name_matches(row_class, class_filter) and \
                    not name_matches(sess_name + ' ' + sess_group, class_filter):
                     continue
+
+            fields   = row.get('additionalFields') or []
+            best_sec = best_lap_from_fields(fields, min_sec=30.0, max_sec=900.0)
+            if best_sec is None:
+                continue
+
             existing = driver_best.get(driver)
             if existing is None or best_sec < existing['_sec']:
                 driver_best[driver] = {
                     'Driver':   driver,
-                    'Class':    lap_class,
+                    'Class':    row_class,
                     'Best Lap': seconds_to_lap(best_sec),
                     '_sec':     best_sec,
                     'Event':    ev_name,
