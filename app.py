@@ -1,0 +1,513 @@
+“””
+app.py — NASA Grid Lap Times
+Streamlit web app: select track, class, and date range to get a
+copy-pasteable fastest-lap grid table.
+
+Deploy free at: https://streamlit.io/cloud
+“””
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta, timezone, date
+from collections import defaultdict
+
+# ── page config (must be first Streamlit call) ────────────────────────────────
+
+st.set_page_config(
+page_title=“NASA Grid Laps”,
+page_icon=“🏁”,
+layout=“centered”,
+)
+
+# ── custom CSS ────────────────────────────────────────────────────────────────
+
+st.markdown(”””
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&display=swap');
+
+  html, body, [class*="css"] {
+    font-family: 'Barlow', sans-serif;
+  }
+
+  /* Page background */
+  .stApp {
+    background-color: #0f1117;
+    color: #e8e8e8;
+  }
+
+  /* Header */
+  .nasa-header {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    border-bottom: 3px solid #e94560;
+    padding: 2rem 2rem 1.5rem;
+    margin: -1rem -1rem 2rem;
+    border-radius: 0 0 8px 8px;
+  }
+  .nasa-header h1 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    margin: 0 0 0.25rem;
+  }
+  .nasa-header p {
+    color: #a0aec0;
+    font-size: 0.95rem;
+    margin: 0;
+  }
+  .accent { color: #e94560; }
+
+  /* Cards */
+  .filter-card {
+    background: #1a1f2e;
+    border: 1px solid #2d3748;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* Section labels */
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #e94560;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Grid table */
+  .grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    margin-top: 1rem;
+  }
+  .grid-table thead tr {
+    background: #e94560;
+    color: white;
+  }
+  .grid-table thead th {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.65rem 1rem;
+    text-align: left;
+  }
+  .grid-table tbody tr:nth-child(even) { background: #1a1f2e; }
+  .grid-table tbody tr:nth-child(odd)  { background: #151929; }
+  .grid-table tbody tr:hover           { background: #0f3460; }
+  .grid-table tbody tr:first-child td  { font-weight: 600; }
+  .grid-table td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #2d3748;
+    color: #e8e8e8;
+  }
+  .grid-table td.pos { color: #a0aec0; font-size: 0.85rem; }
+  .grid-table td.laptime {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1.05rem;
+    color: #68d391;
+    font-weight: 600;
+  }
+  .grid-table tbody tr:first-child td.laptime { color: #f6e05e; }
+
+  /* Status pills */
+  .pill {
+    display: inline-block;
+    padding: 0.2rem 0.7rem;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+  }
+  .pill-success { background: #1c4532; color: #68d391; }
+  .pill-warn    { background: #744210; color: #f6ad55; }
+  .pill-info    { background: #1a365d; color: #63b3ed; }
+
+  /* Streamlit overrides */
+  div[data-testid="stSelectbox"] label,
+  div[data-testid="stMultiSelect"] label,
+  div[data-testid="stDateInput"] label,
+  div[data-testid="stTextInput"] label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #a0aec0 !important;
+  }
+  div[data-testid="stButton"] > button {
+    background: #e94560 !important;
+    color: white !important;
+    border: none !important;
+    font-family: 'Barlow Condensed', sans-serif !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    padding: 0.6rem 2rem !important;
+    border-radius: 4px !important;
+    width: 100%;
+  }
+  div[data-testid="stButton"] > button:hover {
+    background: #c53030 !important;
+  }
+  div[data-testid="stDownloadButton"] > button {
+    background: #2d3748 !important;
+    color: #e8e8e8 !important;
+    border: 1px solid #4a5568 !important;
+    font-family: 'Barlow Condensed', sans-serif !important;
+    font-size: 0.9rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+    width: 100%;
+  }
+  .stAlert { border-radius: 6px; }
+  footer { visibility: hidden; }
+</style>
+
+“””, unsafe_allow_html=True)
+
+# ── header ────────────────────────────────────────────────────────────────────
+
+st.markdown(”””
+
+<div class="nasa-header">
+  <h1>🏁 NASA <span class="accent">Grid</span> Laps</h1>
+  <p>Fastest lap times per driver — sorted for race day grid lineup</p>
+</div>
+""", unsafe_allow_html=True)
+
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def lap_to_seconds(lap_time) -> float | None:
+if not lap_time:
+return None
+try:
+s = str(lap_time).strip()
+if “:” in s:
+m, sec = s.split(”:”, 1)
+return int(m) * 60 + float(sec)
+return float(s)
+except (ValueError, AttributeError):
+return None
+
+def seconds_to_lap(secs: float) -> str:
+m = int(secs // 60)
+s = secs % 60
+return f”{m}:{s:06.3f}”
+
+def parse_event_date(ev: dict) -> datetime | None:
+for key in (“date”, “startDate”, “start_date”, “eventDate”, “event_date”):
+val = ev.get(key)
+if val:
+try:
+dt = datetime.fromisoformat(str(val).replace(“Z”, “+00:00”))
+return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+except ValueError:
+continue
+return None
+
+def name_matches(name: str, query: str) -> bool:
+return query.strip().lower() in name.lower()
+
+def get_field(d: dict, *keys):
+for k in keys:
+v = d.get(k)
+if v:
+return v
+return None
+
+# ── cached API calls ──────────────────────────────────────────────────────────
+
+@st.cache_resource(show_spinner=False)
+def get_client():
+from mylaps_client_wrapper import SpeedhiveClient
+return SpeedhiveClient()
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_all_events(org_id: int) -> list[dict]:
+client = get_client()
+return list(client.iter_events(org_id))
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_sessions(event_id) -> list[dict]:
+client = get_client()
+return client.get_sessions(event_id) or []
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_results(session_id) -> list[dict]:
+client = get_client()
+return client.get_results(session_id) or []
+
+# ── sidebar — org config ──────────────────────────────────────────────────────
+
+with st.sidebar:
+st.markdown(”### ⚙️ Organisation”)
+org_id = st.number_input(
+“Speedhive Org ID”,
+min_value=1,
+value=41593,
+step=1,
+help=“Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX”,
+)
+st.caption(“Default: 41593 = NASA Mid-Atlantic”)
+st.divider()
+st.markdown(”### 📅 Date Range”)
+col1, col2 = st.columns(2)
+with col1:
+date_from = st.date_input(“From”, value=date.today() - timedelta(days=365))
+with col2:
+date_to   = st.date_input(“To”,   value=date.today())
+st.divider()
+st.markdown(”### 🔍 Filters”)
+
+```
+# Load tracks for dropdown
+track_input_mode = st.radio(
+    "Track selection", ["Choose from list", "Type manually"], horizontal=True
+)
+
+if track_input_mode == "Choose from list":
+    with st.spinner("Loading tracks…"):
+        try:
+            all_events = fetch_all_events(org_id)
+            cutoff_dt  = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+            track_names = set()
+            for ev in all_events:
+                ev_date = parse_event_date(ev)
+                if ev_date and ev_date < cutoff_dt:
+                    continue
+                loc = (ev.get("location") or ev.get("venue") or
+                       ev.get("name") or "")
+                if loc:
+                    track_names.add(loc.strip())
+            track_list = sorted(track_names)
+            track_filter = st.selectbox("Track", ["(all tracks)"] + track_list)
+            if track_filter == "(all tracks)":
+                track_filter = ""
+        except Exception as e:
+            st.error(f"Could not load tracks: {e}")
+            track_filter = st.text_input("Track name fragment")
+else:
+    track_filter = st.text_input(
+        "Track name fragment",
+        placeholder="e.g. Carolina",
+    )
+
+class_filter = st.text_input(
+    "Class / session filter",
+    value="Spec E30",
+    placeholder="e.g. Spec E30, TTD, TTA",
+    help="Leave blank to include all classes",
+)
+
+run_btn = st.button("🏁  FETCH GRID", use_container_width=True)
+```
+
+# ── main content ──────────────────────────────────────────────────────────────
+
+if not run_btn:
+st.markdown(”””
+<div style="text-align:center; padding: 4rem 2rem; color: #4a5568;">
+<div style="font-size: 3rem; margin-bottom: 1rem;">🏎️</div>
+<div style="font-family: 'Barlow Condensed', sans-serif; font-size: 1.2rem;
+letter-spacing: 0.08em; text-transform: uppercase; color: #718096;">
+Select your filters and click Fetch Grid
+</div>
+</div>
+“””, unsafe_allow_html=True)
+st.stop()
+
+# ── run the query ─────────────────────────────────────────────────────────────
+
+from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
+to_dt   = datetime.combine(date_to,   datetime.max.time()).replace(tzinfo=timezone.utc)
+
+progress_bar = st.progress(0, text=“Loading events…”)
+status_text  = st.empty()
+
+try:
+all_events = fetch_all_events(org_id)
+except Exception as e:
+st.error(f”❌ Could not connect to Speedhive API: {e}”)
+st.stop()
+
+# filter events by track and date
+
+matching_events = []
+for ev in all_events:
+ev_name = ev.get(“name”, “”) or “”
+ev_loc  = ev.get(“location”, “”) or ev.get(“venue”, “”) or “”
+combined = f”{ev_name} {ev_loc}”
+if track_filter and not name_matches(combined, track_filter):
+continue
+ev_date = parse_event_date(ev)
+if ev_date:
+if ev_date < from_dt or ev_date > to_dt:
+continue
+matching_events.append(ev)
+
+if not matching_events:
+progress_bar.empty()
+st.warning(
+f”No events found for **’{track_filter or ‘all tracks’}’** “
+f”between {date_from} and {date_to}.\n\n”
+“💡 Try a shorter track name fragment, or use ‘Choose from list’ mode.”
+)
+st.stop()
+
+# fetch laps for each matching event
+
+driver_best: dict[str, dict] = {}
+total = len(matching_events)
+
+for i, ev in enumerate(matching_events):
+ev_id   = ev.get(“id”)
+ev_name = ev.get(“name”, str(ev_id))
+ev_date = parse_event_date(ev)
+date_str = ev_date.date().isoformat() if ev_date else “—”
+
+```
+pct = int((i / total) * 100)
+progress_bar.progress(pct, text=f"Scanning: {ev_name} ({i+1}/{total})")
+status_text.caption(f"📅 {date_str} — {ev_name}")
+
+try:
+    sessions = fetch_sessions(ev_id)
+except Exception:
+    continue
+
+for sess in sessions:
+    sess_id    = sess.get("id")
+    sess_name  = sess.get("name", "") or ""
+    sess_class = (sess.get("class") or sess.get("className") or
+                  sess.get("class_name") or sess.get("group") or "")
+    combined_sess = f"{sess_name} {sess_class}"
+
+    if class_filter and not name_matches(combined_sess, class_filter):
+        continue
+
+    try:
+        results = fetch_results(sess_id)
+    except Exception:
+        continue
+
+    for entry in results:
+        driver = (get_field(entry, "driver", "driverName", "driver_name", "name")
+                  or "Unknown")
+        best_raw = get_field(entry, "bestLap", "best_lap", "bestLapTime", "best_lap_time")
+        best_sec = lap_to_seconds(best_raw)
+        if best_sec is None:
+            continue
+
+        existing = driver_best.get(driver)
+        if existing is None or best_sec < existing["best_lap_seconds"]:
+            driver_best[driver] = {
+                "Driver":      driver,
+                "Best Lap":    seconds_to_lap(best_sec),
+                "_seconds":    best_sec,
+                "Event":       ev_name,
+                "Session":     sess_name,
+                "Date":        date_str,
+            }
+```
+
+progress_bar.progress(100, text=“Done!”)
+progress_bar.empty()
+status_text.empty()
+
+# ── render results ────────────────────────────────────────────────────────────
+
+if not driver_best:
+st.warning(
+f”Events were found but no lap data matched class **’{class_filter}’**.\n\n”
+“💡 Try a shorter fragment like `E30` instead of `Spec E30`, or leave blank.”
+)
+st.stop()
+
+grid = sorted(driver_best.values(), key=lambda r: r[”_seconds”])
+
+# summary pills
+
+track_label = track_filter or “All Tracks”
+class_label = class_filter or “All Classes”
+date_label  = f”{date_from} → {date_to}”
+
+st.markdown(f”””
+
+<div style="display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.5rem;">
+  <span class="pill pill-info">🏟 {track_label}</span>
+  <span class="pill pill-success">🔧 {class_label}</span>
+  <span class="pill pill-warn">📅 {date_label}</span>
+  <span class="pill pill-info">👤 {len(grid)} drivers</span>
+</div>
+""", unsafe_allow_html=True)
+
+# HTML table (copy-paste friendly)
+
+rows_html = “”
+for pos, row in enumerate(grid, 1):
+rows_html += f”””
+<tr>
+<td class="pos">{pos}</td>
+<td><strong>{row[‘Driver’]}</strong></td>
+<td class="laptime">{row[‘Best Lap’]}</td>
+<td>{row[‘Event’]}</td>
+<td>{row[‘Session’]}</td>
+<td>{row[‘Date’]}</td>
+</tr>”””
+
+st.markdown(f”””
+
+<table class="grid-table">
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Driver</th>
+      <th>Best Lap</th>
+      <th>Event</th>
+      <th>Session</th>
+      <th>Date</th>
+    </tr>
+  </thead>
+  <tbody>{rows_html}</tbody>
+</table>
+""", unsafe_allow_html=True)
+
+st.markdown(”<br>”, unsafe_allow_html=True)
+
+# CSV download
+
+df = pd.DataFrame([
+{
+“Position”:   pos,
+“Driver”:     r[“Driver”],
+“Best Lap”:   r[“Best Lap”],
+“Event”:      r[“Event”],
+“Session”:    r[“Session”],
+“Date”:       r[“Date”],
+}
+for pos, r in enumerate(grid, 1)
+])
+
+csv_bytes = df.to_csv(index=False).encode(“utf-8”)
+fname = f”grid_{(track_filter or ‘all’).replace(’ ‘,’*’)}*{(class_filter or ‘all’).replace(’ ‘,’_’)}.csv”
+
+col1, col2 = st.columns([2, 1])
+with col1:
+st.download_button(
+label=“⬇️  Download CSV (open in Excel)”,
+data=csv_bytes,
+file_name=fname,
+mime=“text/csv”,
+use_container_width=True,
+)
+with col2:
+st.caption(f”💡 You can also select all rows in the table above and paste directly into Excel.”)
