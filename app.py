@@ -401,24 +401,38 @@ for i, ev in enumerate(matching):
         if not debug_mode and not is_lightning_race:
             continue
 
-        # ---- debug: show lapdata for first lightning session ---------------
+        # ---- debug: show raw API response for first session ---------------
         if debug_mode and not debug_shown:
-            lap_entries_dbg = fetch_lapdata(sess_id)
-            if lap_entries_dbg:
-                debug_shown = True
-                prog.empty()
-                status.empty()
-                st.warning('DEBUG MODE -- lapdata for: **%s** / **%s**' % (ev_name, sess_name))
-                st.markdown('**Session name raw repr:** `%s`' % repr(sess_name))
-                st.markdown('**Group name raw repr:** `%s`' % repr(sess_group))
-                st.markdown('**Is lightning race (name or group starts with it):** `%s`' % is_lightning_race)
-                st.markdown('Found **%d** participants with lap times.' % len(lap_entries_dbg))
-                for drv, cls, best in lap_entries_dbg[:5]:
-                    match = (not class_filter) or name_matches(cls, class_filter)
-                    st.markdown('**%s** | class: `%s` | best lap: `%s` | filter matches: `%s`' % (
-                        drv, repr(cls), seconds_to_lap(best), match))
-                st.info('Turn off Debug mode once lap times and class names look correct.')
-                st.stop()
+            debug_shown = True
+            prog.empty()
+            status.empty()
+            st.warning('DEBUG MODE -- Session: **%s** | Group: **%s**' % (sess_name, sess_group))
+            st.markdown('**sess_name repr:** `%s`' % repr(sess_name))
+            st.markdown('**sess_group repr:** `%s`' % repr(sess_group))
+            st.markdown('**is_lightning_race:** `%s`' % is_lightning_race)
+            # Show raw lapdata API response
+            try:
+                raw = api_get('/sessions/%d/lapdata' % sess_id, params={'count': 10, 'offset': 0})
+                st.markdown('**Raw /lapdata response type:** `%s`' % type(raw).__name__)
+                if isinstance(raw, dict):
+                    st.markdown('**Top-level keys:** `%s`' % list(raw.keys()))
+                    lap_data_info = raw.get('lapDataInfo') or {}
+                    st.markdown('**lapDataInfo:** `%s`' % lap_data_info)
+                    laps = raw.get('laps') or []
+                    st.markdown('**laps count:** `%d`' % len(laps))
+                    if laps:
+                        st.markdown('**First lap keys:** `%s`' % list(laps[0].keys()))
+                        st.markdown('**First lap:** `%s`' % laps[0])
+                elif isinstance(raw, list):
+                    st.markdown('**List length:** `%d`' % len(raw))
+                    if raw:
+                        st.markdown('**First item keys:** `%s`' % list(raw[0].keys()) if isinstance(raw[0], dict) else str(raw[0]))
+                else:
+                    st.markdown('**Raw value:** `%s`' % str(raw))
+            except Exception as ex:
+                st.error('lapdata API call failed: %s' % ex)
+            st.info('Turn off Debug mode once you understand the structure.')
+            st.stop()
         # ------------------------------------------------------------------
 
         # Use lapdata endpoint -- additionalFields has car metadata, not lap times
