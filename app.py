@@ -393,9 +393,12 @@ for i, ev in enumerate(matching):
         sess_name  = sess.get('name', '') or ''
         sess_group = sess.get('groupName', '') or ''
 
-        # Only process sessions whose title starts with 'lightning race'
-        sess_title = (sess_name or sess_group or '').strip().lower()
-        if not sess_title.startswith('lightning race'):
+        # Only process sessions where the session name OR group name starts with 'lightning race'
+        # Group name holds 'Lightning Race 1 $$$'; session name may hold the class e.g. 'Spec E30'
+        sess_n = sess_name.strip().lower()
+        sess_g = sess_group.strip().lower()
+        is_lightning_race = sess_n.startswith('lightning race') or sess_g.startswith('lightning race')
+        if not debug_mode and not is_lightning_race:
             continue
 
         # ---- debug: show lapdata for first lightning session ---------------
@@ -406,6 +409,9 @@ for i, ev in enumerate(matching):
                 prog.empty()
                 status.empty()
                 st.warning('DEBUG MODE -- lapdata for: **%s** / **%s**' % (ev_name, sess_name))
+                st.markdown('**Session name raw repr:** `%s`' % repr(sess_name))
+                st.markdown('**Group name raw repr:** `%s`' % repr(sess_group))
+                st.markdown('**Is lightning race (name or group starts with it):** `%s`' % is_lightning_race)
                 st.markdown('Found **%d** participants with lap times.' % len(lap_entries_dbg))
                 for drv, cls, best in lap_entries_dbg[:5]:
                     match = (not class_filter) or name_matches(cls, class_filter)
