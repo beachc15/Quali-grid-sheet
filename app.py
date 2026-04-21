@@ -9,9 +9,9 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone, date
 
 st.set_page_config(
-page_title=“NASA Grid Laps”,
-page_icon=”:checkered_flag:”,
-layout=“centered”,
+page_title=‘NASA Grid Laps’,
+page_icon=’:checkered_flag:’,
+layout=‘centered’,
 )
 
 st.markdown(”””
@@ -132,8 +132,8 @@ if not lap_time:
 return None
 try:
 s = str(lap_time).strip()
-if “:” in s:
-m, sec = s.split(”:”, 1)
+if ‘:’ in s:
+m, sec = s.split(’:’, 1)
 return int(m) * 60 + float(sec)
 return float(s)
 except (ValueError, AttributeError):
@@ -142,14 +142,14 @@ return None
 def seconds_to_lap(secs):
 m = int(secs // 60)
 s = secs % 60
-return “%d:%06.3f” % (m, s)
+return ‘%d:%06.3f’ % (m, s)
 
 def parse_event_date(ev):
-for key in (“date”, “startDate”, “start_date”, “eventDate”, “event_date”):
+for key in (‘date’, ‘startDate’, ‘start_date’, ‘eventDate’, ‘event_date’):
 val = ev.get(key)
 if val:
 try:
-dt = datetime.fromisoformat(str(val).replace(“Z”, “+00:00”))
+dt = datetime.fromisoformat(str(val).replace(‘Z’, ‘+00:00’))
 return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 except ValueError:
 continue
@@ -189,31 +189,31 @@ return client.get_results(session_id) or []
 
 # ––––– org config (collapsible, advanced) —————————––
 
-with st.expander(“Advanced: Organisation Settings”, expanded=False):
+with st.expander(‘Advanced: Organisation Settings’, expanded=False):
 org_id = st.number_input(
-“Speedhive Org ID”,
+‘Speedhive Org ID’,
 min_value=1, value=41593, step=1,
-help=“Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX”,
+help=‘Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX’,
 )
-st.caption(“Default 41593 = NASA Mid-Atlantic”)
+st.caption(‘Default 41593 = NASA Mid-Atlantic’)
 
 # ––––– main filters (always visible) ————————————
 
-st.markdown(”#### Filters”)
+st.markdown(’#### Filters’)
 
 col_a, col_b = st.columns(2)
 with col_a:
-date_from = st.date_input(“From”, value=date.today() - timedelta(days=365))
+date_from = st.date_input(‘From’, value=date.today() - timedelta(days=365))
 with col_b:
-date_to = st.date_input(“To”, value=date.today())
+date_to = st.date_input(‘To’, value=date.today())
 
 track_input_mode = st.radio(
-“Track selection”, [“Choose from list”, “Type manually”], horizontal=True
+‘Track selection’, [‘Choose from list’, ‘Type manually’], horizontal=True
 )
 
-track_filter = “”
-if track_input_mode == “Choose from list”:
-with st.spinner(“Loading tracks…”):
+track_filter = ‘’
+if track_input_mode == ‘Choose from list’:
+with st.spinner(‘Loading tracks…’):
 try:
 all_events_for_list = fetch_all_events(org_id)
 cutoff_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
@@ -222,29 +222,29 @@ for ev in all_events_for_list:
 ev_date = parse_event_date(ev)
 if ev_date and ev_date < cutoff_dt:
 continue
-loc = ev.get(“location”) or ev.get(“venue”) or ev.get(“name”) or “”
+loc = ev.get(‘location’) or ev.get(‘venue’) or ev.get(‘name’) or ‘’
 if loc:
 track_names.add(loc.strip())
 track_list = sorted(track_names)
-choice = st.selectbox(“Track”, [”(all tracks)”] + track_list)
-track_filter = “” if choice == “(all tracks)” else choice
+choice = st.selectbox(‘Track’, [’(all tracks)’] + track_list)
+track_filter = ‘’ if choice == ‘(all tracks)’ else choice
 except Exception as e:
-st.error(“Could not load tracks: %s” % e)
-track_filter = st.text_input(“Track name fragment”)
+st.error(‘Could not load tracks: %s’ % e)
+track_filter = st.text_input(‘Track name fragment’)
 else:
 track_filter = st.text_input(
-“Track name fragment”,
-placeholder=“e.g. Carolina”,
+‘Track name fragment’,
+placeholder=‘e.g. Carolina’,
 )
 
 class_filter = st.text_input(
-“Class / session filter”,
-value=“Spec E30”,
-placeholder=“e.g. Spec E30, TTD, TTA”,
-help=“Leave blank to show all classes”,
+‘Class / session filter’,
+value=‘Spec E30’,
+placeholder=‘e.g. Spec E30, TTD, TTA’,
+help=‘Leave blank to show all classes’,
 )
 
-run_btn = st.button(“FETCH GRID”, use_container_width=True)
+run_btn = st.button(‘FETCH GRID’, use_container_width=True)
 
 if not run_btn:
 st.stop()
@@ -254,20 +254,20 @@ st.stop()
 from_dt = datetime.combine(date_from, datetime.min.time()).replace(tzinfo=timezone.utc)
 to_dt   = datetime.combine(date_to,   datetime.max.time()).replace(tzinfo=timezone.utc)
 
-progress_bar = st.progress(0, text=“Loading events…”)
+progress_bar = st.progress(0, text=‘Loading events…’)
 status_text  = st.empty()
 
 try:
 all_events = fetch_all_events(org_id)
 except Exception as e:
-st.error(“Could not connect to Speedhive API: %s” % e)
+st.error(‘Could not connect to Speedhive API: %s’ % e)
 st.stop()
 
 matching_events = []
 for ev in all_events:
-ev_name = ev.get(“name”, “”) or “”
-ev_loc  = ev.get(“location”, “”) or ev.get(“venue”, “”) or “”
-combined = ev_name + “ “ + ev_loc
+ev_name = ev.get(‘name’, ‘’) or ‘’
+ev_loc  = ev.get(‘location’, ‘’) or ev.get(‘venue’, ‘’) or ‘’
+combined = ev_name + ’ ’ + ev_loc
 if track_filter and not name_matches(combined, track_filter):
 continue
 ev_date = parse_event_date(ev)
@@ -281,7 +281,7 @@ progress_bar.empty()
 st.warning(
 “No events found for ‘%s’ between %s and %s. “
 “Try a shorter name fragment or switch to ‘Type manually’.”
-% (track_filter or “all tracks”, date_from, date_to)
+% (track_filter or ‘all tracks’, date_from, date_to)
 )
 st.stop()
 
@@ -289,15 +289,15 @@ driver_best = {}
 total = len(matching_events)
 
 for i, ev in enumerate(matching_events):
-ev_id    = ev.get(“id”)
-ev_name  = ev.get(“name”, str(ev_id))
+ev_id    = ev.get(‘id’)
+ev_name  = ev.get(‘name’, str(ev_id))
 ev_date  = parse_event_date(ev)
-date_str = ev_date.date().isoformat() if ev_date else “–”
+date_str = ev_date.date().isoformat() if ev_date else ‘–’
 
 ```
 pct = int((i / total) * 100)
-progress_bar.progress(pct, text="Scanning: %s (%d/%d)" % (ev_name, i + 1, total))
-status_text.caption("%s  |  %s" % (date_str, ev_name))
+progress_bar.progress(pct, text='Scanning: %s (%d/%d)' % (ev_name, i + 1, total))
+status_text.caption('%s  |  %s' % (date_str, ev_name))
 
 try:
     sessions = fetch_sessions(ev_id)
@@ -305,13 +305,13 @@ except Exception:
     continue
 
 for sess in sessions:
-    sess_id    = sess.get("id")
-    sess_name  = sess.get("name", "") or ""
+    sess_id    = sess.get('id')
+    sess_name  = sess.get('name', '') or ''
     sess_class = (
-        sess.get("class") or sess.get("className") or
-        sess.get("class_name") or sess.get("group") or ""
+        sess.get('class') or sess.get('className') or
+        sess.get('class_name') or sess.get('group') or ''
     )
-    combined_sess = sess_name + " " + sess_class
+    combined_sess = sess_name + ' ' + sess_class
     if class_filter and not name_matches(combined_sess, class_filter):
         continue
 
@@ -321,24 +321,24 @@ for sess in sessions:
         continue
 
     for entry in results:
-        driver   = get_field(entry, "driver", "driverName", "driver_name", "name") or "Unknown"
-        best_raw = get_field(entry, "bestLap", "best_lap", "bestLapTime", "best_lap_time")
+        driver   = get_field(entry, 'driver', 'driverName', 'driver_name', 'name') or 'Unknown'
+        best_raw = get_field(entry, 'bestLap', 'best_lap', 'bestLapTime', 'best_lap_time')
         best_sec = lap_to_seconds(best_raw)
         if best_sec is None:
             continue
         existing = driver_best.get(driver)
-        if existing is None or best_sec < existing["_seconds"]:
+        if existing is None or best_sec < existing['_seconds']:
             driver_best[driver] = {
-                "Driver":   driver,
-                "Best Lap": seconds_to_lap(best_sec),
-                "_seconds": best_sec,
-                "Event":    ev_name,
-                "Session":  sess_name,
-                "Date":     date_str,
+                'Driver':   driver,
+                'Best Lap': seconds_to_lap(best_sec),
+                '_seconds': best_sec,
+                'Event':    ev_name,
+                'Session':  sess_name,
+                'Date':     date_str,
             }
 ```
 
-progress_bar.progress(100, text=“Done!”)
+progress_bar.progress(100, text=‘Done!’)
 progress_bar.empty()
 status_text.empty()
 
@@ -350,13 +350,13 @@ st.warning(
 )
 st.stop()
 
-grid = sorted(driver_best.values(), key=lambda r: r[”_seconds”])
+grid = sorted(driver_best.values(), key=lambda r: r[’_seconds’])
 
 # summary pills
 
-track_label = track_filter or “All Tracks”
-class_label = class_filter or “All Classes”
-date_label  = “%s to %s” % (date_from, date_to)
+track_label = track_filter or ‘All Tracks’
+class_label = class_filter or ‘All Classes’
+date_label  = ‘%s to %s’ % (date_from, date_to)
 
 st.markdown(”””
 
@@ -370,17 +370,17 @@ st.markdown(”””
 
 # results table
 
-rows_html = “”
+rows_html = ‘’
 for pos, row in enumerate(grid, 1):
 rows_html += (
-“<tr>”
+‘<tr>’
 “<td class='pos'>%d</td>”
-“<td><strong>%s</strong></td>”
+‘<td><strong>%s</strong></td>’
 “<td class='laptime'>%s</td>”
 “<td class='meta'>%s</td>”
 “<td class='meta'>%s</td>”
-“</tr>”
-) % (pos, row[“Driver”], row[“Best Lap”], row[“Event”], row[“Date”])
+‘</tr>’
+) % (pos, row[‘Driver’], row[‘Best Lap’], row[‘Event’], row[‘Date’])
 
 st.markdown(”””
 
@@ -395,33 +395,33 @@ st.markdown(”””
 </table>
 """ % rows_html, unsafe_allow_html=True)
 
-st.markdown(”<br>”, unsafe_allow_html=True)
+st.markdown(’<br>’, unsafe_allow_html=True)
 
 # CSV download
 
 df = pd.DataFrame([
 {
-“Position”: pos,
-“Driver”:   r[“Driver”],
-“Best Lap”: r[“Best Lap”],
-“Event”:    r[“Event”],
-“Session”:  r[“Session”],
-“Date”:     r[“Date”],
+‘Position’: pos,
+‘Driver’:   r[‘Driver’],
+‘Best Lap’: r[‘Best Lap’],
+‘Event’:    r[‘Event’],
+‘Session’:  r[‘Session’],
+‘Date’:     r[‘Date’],
 }
 for pos, r in enumerate(grid, 1)
 ])
 
-csv_bytes = df.to_csv(index=False).encode(“utf-8”)
-fname = “grid_%s_%s.csv” % (
-(track_filter or “all”).replace(” “, “*”),
-(class_filter or “all”).replace(” “, “*”),
+csv_bytes = df.to_csv(index=False).encode(‘utf-8’)
+fname = ‘grid_%s_%s.csv’ % (
+(track_filter or ‘all’).replace(’ ‘, ‘*’),
+(class_filter or ‘all’).replace(’ ’, ’*’),
 )
 
 st.download_button(
-label=“Download CSV (open in Excel)”,
+label=‘Download CSV (open in Excel)’,
 data=csv_bytes,
 file_name=fname,
-mime=“text/csv”,
+mime=‘text/csv’,
 use_container_width=True,
 )
-st.caption(“You can also select all rows in the table and paste directly into Excel.”)
+st.caption(‘You can also select all rows in the table and paste directly into Excel.’)
