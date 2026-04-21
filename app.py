@@ -152,6 +152,57 @@ def fetch_classification(session_id):
         return []
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_lapdata(session_id):
+    # Paginate through all participants; each page = one participant.
+    # Returns list of (driver_name, class_name, best_lap_seconds).
+    results = []
+    offset = 0
+    page_size = 500
+    seen = set()
+    while True:
+        try:
+            data = api_get(
+                '/sessions/%d/lapdata' % session_id,
+                params={'count': page_size, 'offset': offset}
+            )
+        except Exception:
+            break
+        if not data:
+            break
+        info    = data.get('lapDataInfo') or {}
+        p_info  = info.get('participantInfo') or {}
+        driver  = (p_info.get('name') or '').strip() or 'Unknown'
+        p_class = (p_info.get('class') or '').strip()
+        laps    = data.get('laps') or []
+        if driver in seen:
+            break
+        if driver != 'Unknown':
+            seen.add(driver)
+        best = None
+        for lap in laps:
+            lt = lap.get('lapTime')
+            if lt is None:
+                continue
+            if isinstance(lt, str):
+                t = parse_time_str(lt)
+            else:
+                raw = float(lt)
+                t = raw / 1000.0 if raw > 10000 else raw
+            if t and 30.0 <= t <= 900.0:
+                if best is None or t < best:
+                    best = t
+        if driver != 'Unknown' and best is not None:
+            results.append((driver, p_class, best))
+        if not laps:
+            break
+        offset += page_size
+        if offset > 300 * page_size:
+            break
+    return results
+
+
+
 # ---------- helpers -----------------------------------------------------------
 
 # Best lap for a car race at a road course is typically between 45s and 9min.
@@ -342,59 +393,39 @@ for i, ev in enumerate(matching):
         sess_name  = sess.get('name', '') or ''
         sess_group = sess.get('groupName', '') or ''
 
-        # Only process sessions with 'lightning' in the title
-        if not name_matches(sess_name + ' ' + sess_group, 'lightning'):
+        # Only process sessions whose title starts with 'lightning race'
+        sess_title = (sess_name or sess_group or '').strip().lower()
+        if not sess_title.startswith('lightning race'):
             continue
 
-        rows = fetch_classification(sess_id)
-
-        # ---- debug: show raw data + filter diagnostics ---------------------
-        if debug_mode and not debug_shown and rows:
-            debug_shown = True
-            prog.empty()
-            status.empty()
-            st.warning('DEBUG MODE -- Session: **%s** / Group: **%s**' % (sess_name, sess_group))
-            for r in rows[:5]:
-                raw_class  = r.get('resultClass', '')
-                raw_fields = r.get('additionalFields') or []
-                parsed_times = []
-                for f in raw_fields:
-                    t = parse_time_str(f)
-                    parsed_times.append('%s -> %s' % (repr(f), ('%.3fs' % t) if t else 'None'))
-                best = best_lap_from_fields(raw_fields, min_sec=30.0, max_sec=900.0)
-                class_match = (not class_filter) or name_matches(raw_class.strip(), class_filter)
-                st.markdown('**Driver:** `%s`' % r.get('name', '?'))
-                st.markdown('**resultClass raw repr:** `%s`' % repr(raw_class))
-                st.markdown('**Class filter "%s" matches:** `%s`' % (class_filter, class_match))
-                st.markdown('**additionalFields parsed:** `%s`' % str(parsed_times))
-                st.markdown('**Best lap picked (30-900s):** `%s`' % (('%.3fs = %s' % (best, seconds_to_lap(best))) if best else 'NONE -- no times in 30-900s range'))
-                st.divider()
-            st.info('Turn off Debug mode once you understand the data.')
-            st.stop()
+        # ---- debug: show lapdata for first lightning session ---------------
+        if debug_mode and not debug_shown:
+            lap_entries_dbg = fetch_lapdata(sess_id)
+            if lap_entries_dbg:
+                debug_shown = True
+                prog.empty()
+                status.empty()
+                st.warning('DEBUG MODE -- lapdata for: **%s** / **%s**' % (ev_name, sess_name))
+                st.markdown('Found **%d** participants with lap times.' % len(lap_entries_dbg))
+                for drv, cls, best in lap_entries_dbg[:5]:
+                    match = (not class_filter) or name_matches(cls, class_filter)
+                    st.markdown('**%s** | class: `%s` | best lap: `%s` | filter matches: `%s`' % (
+                        drv, repr(cls), seconds_to_lap(best), match))
+                st.info('Turn off Debug mode once lap times and class names look correct.')
+                st.stop()
         # ------------------------------------------------------------------
 
-        for row in rows:
-            driver    = row.get('name') or 'Unknown'
-            # Strip whitespace to handle hidden spaces/chars in resultClass
-            row_class = (row.get('resultClass') or '').strip()
-
-            # Class filter: match against resultClass directly, or session name
+        # Use lapdata endpoint -- additionalFields has car metadata, not lap times
+        for (driver, lap_class, best_sec) in fetch_lapdata(sess_id):
             if class_filter:
-                if not name_matches(row_class, class_filter) and                    not name_matches(sess_name + ' ' + sess_group, class_filter):
+                if not name_matches(lap_class, class_filter) and \
+                   not name_matches(sess_name + ' ' + sess_group, class_filter):
                     continue
-
-            fields   = row.get('additionalFields') or []
-            # Wide range (30s-900s) to catch edge cases
-            best_sec = best_lap_from_fields(fields, min_sec=30.0, max_sec=900.0)
-
-            if best_sec is None:
-                continue
-
             existing = driver_best.get(driver)
             if existing is None or best_sec < existing['_sec']:
                 driver_best[driver] = {
                     'Driver':   driver,
-                    'Class':    row_class,
+                    'Class':    lap_class,
                     'Best Lap': seconds_to_lap(best_sec),
                     '_sec':     best_sec,
                     'Event':    ev_name,
