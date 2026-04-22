@@ -400,7 +400,7 @@ for i, ev in enumerate(matching):
         sess_g = sess_group.strip().lower()
         is_lightning = (sess_n.startswith('lightning') or sess_g.startswith('lightning'))
         # Use 'qual' to catch misspellings like 'Qualiyfing', 'Quaifying', etc.
-        is_qualifying = ('qual' in sess_n or 'qual' in sess_g)
+        is_qualifying = ('qua' in sess_n or 'qua' in sess_g)
         is_race = is_lightning and not is_qualifying
         if not is_lightning:
             continue
