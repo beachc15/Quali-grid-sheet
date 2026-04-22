@@ -585,7 +585,7 @@ for pos, row in enumerate(grid, 1):
                 % (k, v) for k, v in raw.items()
             )
             st.markdown(
-                '<table style="width:100%;border-collapse:collapse;background:#151929;">'
+                '<table style="width:100%%;border-collapse:collapse;background:#151929;">'
                 '<thead><tr>'
                 '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
                 'letter-spacing:0.08em;text-transform:uppercase;">Field</th>'
@@ -620,7 +620,7 @@ for pos, row in enumerate(grid, 1):
                 for idx, s in enumerate(sessions_for_driver)
             )
             st.markdown(
-                '<table style="width:100%;border-collapse:collapse;background:#151929;">'
+                '<table style="width:100%%;border-collapse:collapse;background:#151929;">'
                 '<thead><tr>'
                 '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
                 'letter-spacing:0.08em;text-transform:uppercase;">Best Lap</th>'
