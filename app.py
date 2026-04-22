@@ -394,12 +394,14 @@ for i, ev in enumerate(matching):
         sess_name  = sess.get('name', '') or ''
         sess_group = sess.get('groupName', '') or ''
 
-        # Only process sessions where the session name OR group name starts with 'lightning race'
-        # Group name holds 'Lightning Race 1 $$$'; session name may hold the class e.g. 'Spec E30'
+        # Include all 'lightning' sessions (race + qualifying) so both appear in driver details.
+        # is_race controls whether this counts toward the main grid ranking.
         sess_n = sess_name.strip().lower()
         sess_g = sess_group.strip().lower()
-        is_lightning_race = sess_n.startswith('lightning race') or sess_g.startswith('lightning race')
-        if not is_lightning_race:
+        is_lightning = (sess_n.startswith('lightning') or sess_g.startswith('lightning'))
+        is_qualifying = ('qualifying' in sess_n or 'qualifying' in sess_g)
+        is_race = is_lightning and not is_qualifying
+        if not is_lightning:
             continue
 
         # ---- debug: show classification rows from first lightning race -----
@@ -409,7 +411,7 @@ for i, ev in enumerate(matching):
                 debug_shown = True
                 prog.empty()
                 status.empty()
-                st.warning('DEBUG MODE -- Lightning race session: **%s** | Group: **%s**' % (sess_name, sess_group))
+                st.warning('DEBUG MODE -- Lightning session: **%s** | Group: **%s** | is_race: **%s**' % (sess_name, sess_group, is_race))
                 st.markdown('**Total rows:** `%d`' % len(rows_dbg))
                 for r in rows_dbg[:3]:
                     st.markdown('**Full row dict:**')
@@ -474,8 +476,10 @@ for i, ev in enumerate(matching):
             if not any(s['URL'] == sess_entry['URL'] for s in driver_sessions[driver]):
                 driver_sessions[driver].append(sess_entry)
 
+            # Always record in driver_sessions (race + qualifying shown in details)
+            # Only update driver_best for race sessions (not qualifying)
             existing = driver_best.get(driver)
-            if existing is None or best_sec < existing['_sec']:
+            if is_race and (existing is None or best_sec < existing['_sec']):
                 driver_best[driver] = {
                     'Driver':    driver,
                     'Car #':     (row.get('startNumber') or '').strip(),
