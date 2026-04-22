@@ -289,7 +289,7 @@ with st.expander('Advanced: Organisation Settings', expanded=False):
         'Speedhive Org ID', min_value=1, value=41593, step=1,
         help='Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX',
     )
-    st.caption('Default 41593 = NASA Southeast')
+    st.caption('Default 41593 = NASA Mid-Atlantic')
     debug_mode = st.checkbox('Debug mode (show raw API data for first matching session)')
 
 # ---------- filters -----------------------------------------------------------
@@ -374,7 +374,8 @@ if not matching:
 
 # ---------- scan sessions + classification ------------------------------------
 
-driver_best  = {}
+driver_best     = {}   # best result per driver
+driver_sessions = {}   # all session results per driver
 debug_shown  = False
 total        = len(matching)
 
@@ -438,18 +439,55 @@ for i, ev in enumerate(matching):
             if best_sec is None or best_sec < 30.0:
                 continue
 
+            # Build a clean display dict from the raw row (skip internal/noisy keys)
+            SKIP_KEYS = {'additionalFields', 'user', 'isQualified'}
+            FIELD_LABELS = {
+                'name': 'Driver', 'startNumber': 'Car #', 'resultClass': 'Class',
+                'position': 'Overall Position', 'positionInClass': 'Class Position',
+                'bestTime': 'Best Lap', 'bestLap': 'Best Lap #', 'bestSpeed': 'Best Speed',
+                'totalTime': 'Total Time', 'numberOfLaps': 'Laps', 'status': 'Status',
+                'difference': 'Gap to Leader', 'diffClass': 'Gap in Class',
+            }
+            raw_display = {}
+            for k, v in row.items():
+                if k in SKIP_KEYS:
+                    continue
+                label = FIELD_LABELS.get(k, k)
+                if isinstance(v, dict):
+                    laps_behind = v.get('lapsBehind', 0)
+                    time_diff   = v.get('timeDifference', '')
+                    raw_display[label] = ('%s laps' % laps_behind) if laps_behind else (time_diff or '--')
+                else:
+                    raw_display[label] = v if v not in (None, '') else '--'
+
+            sess_entry = {
+                'Session':  sess_name,
+                'Event':    ev_name,
+                'Date':     date_str,
+                'Best Lap': seconds_to_lap(best_sec),
+                '_sec':     best_sec,
+                'URL':      'https://speedhive.mylaps.com/Sessions/%d' % sess_id,
+            }
+            if driver not in driver_sessions:
+                driver_sessions[driver] = []
+            # Avoid duplicate session entries
+            if not any(s['URL'] == sess_entry['URL'] for s in driver_sessions[driver]):
+                driver_sessions[driver].append(sess_entry)
+
             existing = driver_best.get(driver)
             if existing is None or best_sec < existing['_sec']:
                 driver_best[driver] = {
-                    'Driver':   driver,
-                    'Class':    row_class,
-                    'Best Lap': seconds_to_lap(best_sec),
-                    '_sec':     best_sec,
-                    'Event':    ev_name,
-                    'Track':    track,
-                    'Session':  sess_name,
-                    'Date':     date_str,
-                    'URL':      'https://speedhive.mylaps.com/Sessions/%d' % sess_id,
+                    'Driver':    driver,
+                    'Car #':     (row.get('startNumber') or '').strip(),
+                    'Class':     row_class,
+                    'Best Lap':  seconds_to_lap(best_sec),
+                    '_sec':      best_sec,
+                    'Event':     ev_name,
+                    'Track':     track,
+                    'Session':   sess_name,
+                    'Date':      date_str,
+                    'URL':       'https://speedhive.mylaps.com/Sessions/%d' % sess_id,
+                    '_raw':      raw_display,
                 }
 
 prog.progress(100, text='Done!')
@@ -487,17 +525,18 @@ for pos, row in enumerate(grid, 1):
     rows_html += (
         '<tr>'
         '<td class="pos">%d</td>'
+        '<td class="meta">%s</td>'
         '<td><strong>%s</strong></td>'
         '<td class="laptime">%s</td>'
         '<td class="meta">%s</td>'
         '<td class="meta">%s</td>'
         '<td class="meta"><a href="%s" target="_blank" style="color:#63b3ed;">View</a></td>'
         '</tr>'
-    ) % (pos, row['Driver'], row['Best Lap'], row['Event'], row['Date'], row.get('URL', '#'))
+    ) % (pos, row.get('Car #', ''), row['Driver'], row['Best Lap'], row['Event'], row['Date'], row.get('URL', '#'))
 
 st.markdown('''
 <table class="grid-table">
-  <thead><tr><th>#</th><th>Driver</th><th>Best Lap</th><th>Event</th><th>Date</th><th>Results</th></tr></thead>
+  <thead><tr><th>#</th><th>Car #</th><th>Driver</th><th>Best Lap</th><th>Event</th><th>Date</th><th>Results</th></tr></thead>
   <tbody>%s</tbody>
 </table>
 ''' % rows_html, unsafe_allow_html=True)
@@ -505,7 +544,7 @@ st.markdown('''
 st.markdown('<br>', unsafe_allow_html=True)
 
 df = pd.DataFrame([
-    {'Position': pos, 'Driver': r['Driver'], 'Class': r['Class'],
+    {'Position': pos, 'Car #': r.get('Car #', ''), 'Driver': r['Driver'], 'Class': r['Class'],
      'Best Lap': r['Best Lap'], 'Event': r['Event'], 'Track': r['Track'],
      'Session': r['Session'], 'Date': r['Date'], 'Results URL': r.get('URL', '')}
     for pos, r in enumerate(grid, 1)
@@ -523,3 +562,76 @@ st.download_button(
     use_container_width=True,
 )
 st.caption('You can also select all rows in the table and paste directly into Excel.')
+
+# ---------- driver detail expanders ------------------------------------------
+
+st.markdown('---')
+st.markdown('#### Driver Details')
+st.caption('Click any driver to see full race data and their lap history at this track.')
+
+for pos, row in enumerate(grid, 1):
+    driver   = row['Driver']
+    car_num  = row.get('Car #', '')
+    label    = '%d. %s%s -- %s' % (pos, ('#%s  ' % car_num) if car_num else '', driver, row['Best Lap'])
+    with st.expander(label):
+        # -- full race info table --
+        st.markdown('**Race details from best result**')
+        raw = row.get('_raw', {})
+        if raw:
+            info_rows = ''.join(
+                '<tr><td style="color:#a0aec0;padding:0.4rem 0.75rem;border-bottom:1px solid #2d3748;'
+                'font-size:0.82rem;">%s</td>'
+                '<td style="padding:0.4rem 0.75rem;border-bottom:1px solid #2d3748;font-size:0.88rem;">%s</td></tr>'
+                % (k, v) for k, v in raw.items()
+            )
+            st.markdown(
+                '<table style="width:100%;border-collapse:collapse;background:#151929;">'
+                '<thead><tr>'
+                '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
+                'letter-spacing:0.08em;text-transform:uppercase;">Field</th>'
+                '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
+                'letter-spacing:0.08em;text-transform:uppercase;">Value</th>'
+                '</tr></thead><tbody>%s</tbody></table>' % info_rows,
+                unsafe_allow_html=True
+            )
+        else:
+            st.caption('No detail data available.')
+
+        # -- lap history table --
+        sessions_for_driver = sorted(
+            driver_sessions.get(driver, []), key=lambda s: s['_sec']
+        )
+        if len(sessions_for_driver) > 1:
+            st.markdown('<br>', unsafe_allow_html=True)
+            st.markdown('**All Lightning Race results at %s**' % (row.get('Track') or track_label))
+            hist_rows = ''.join(
+                '<tr>'
+                '<td style="padding:0.4rem 0.75rem;border-bottom:1px solid #2d3748;'
+                'font-family:Barlow Condensed,sans-serif;font-size:1rem;color:%s;">%s</td>'
+                '<td style="padding:0.4rem 0.75rem;border-bottom:1px solid #2d3748;font-size:0.82rem;color:#a0aec0;">%s</td>'
+                '<td style="padding:0.4rem 0.75rem;border-bottom:1px solid #2d3748;font-size:0.82rem;color:#a0aec0;">%s</td>'
+                '<td style="padding:0.4rem 0.75rem;border-bottom:1px solid #2d3748;font-size:0.82rem;">'
+                '<a href="%s" target="_blank" style="color:#63b3ed;">View</a></td>'
+                '</tr>'
+                % (
+                    '#f6e05e' if idx == 0 else '#68d391',
+                    s['Best Lap'], s['Session'], s['Date'], s['URL']
+                )
+                for idx, s in enumerate(sessions_for_driver)
+            )
+            st.markdown(
+                '<table style="width:100%;border-collapse:collapse;background:#151929;">'
+                '<thead><tr>'
+                '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
+                'letter-spacing:0.08em;text-transform:uppercase;">Best Lap</th>'
+                '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
+                'letter-spacing:0.08em;text-transform:uppercase;">Session</th>'
+                '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
+                'letter-spacing:0.08em;text-transform:uppercase;">Date</th>'
+                '<th style="background:#2d3748;padding:0.4rem 0.75rem;text-align:left;font-size:0.75rem;'
+                'letter-spacing:0.08em;text-transform:uppercase;">Results</th>'
+                '</tr></thead><tbody>%s</tbody></table>' % hist_rows,
+                unsafe_allow_html=True
+            )
+        elif sessions_for_driver:
+            st.caption('Only 1 Lightning Race result found at this track in the selected date range.')
