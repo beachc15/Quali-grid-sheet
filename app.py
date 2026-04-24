@@ -13,6 +13,17 @@ st.set_page_config(
     layout='centered',
 )
 
+if 'date_from' not in st.session_state:
+    st.session_state.date_from = date.today() - timedelta(days=365)
+if 'date_to' not in st.session_state:
+    st.session_state.date_to = date.today()
+if 'track_filter' not in st.session_state:
+    st.session_state.track_filter = ''
+if 'class_filter' not in st.session_state:
+    st.session_state.class_filter = 'Spec E30'
+if 'track_input_mode' not in st.session_state:
+    st.session_state.track_input_mode = 'Choose from list'
+
 st.markdown('''
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&display=swap');
@@ -103,7 +114,7 @@ def api_get(path, params=None):
     return r.json()
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=7200, show_spinner=False)
 def fetch_all_events(org_id):
     events = []
     offset = 0
@@ -124,7 +135,7 @@ def fetch_all_events(org_id):
     return events
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=7200, show_spinner=False)
 def fetch_sessions(event_id):
     try:
         data = api_get('/events/%d/sessions' % event_id)
@@ -141,7 +152,7 @@ def fetch_sessions(event_id):
         return []
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=7200, show_spinner=False)
 def fetch_classification(session_id):
     try:
         data = api_get('/sessions/%d/classification' % session_id)
@@ -152,7 +163,7 @@ def fetch_classification(session_id):
         return []
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
+@st.cache_data(ttl=7200, show_spinner=False)
 def fetch_lapdata(session_id):
     # Paginate through all participants; each page = one participant.
     # Returns list of (driver_name, class_name, best_lap_seconds).
@@ -289,7 +300,7 @@ with st.expander('Advanced: Organisation Settings', expanded=False):
         'Speedhive Org ID', min_value=1, value=41593, step=1,
         help='Find your org ID in the Speedhive URL: speedhive.mylaps.com/organizations/XXXXX',
     )
-    st.caption('Default 41593 = NASA Mid-Atlantic')
+    st.caption('Default 41593 = NASA Southeast')
     debug_mode = st.checkbox('Debug mode (show raw API data for first matching session)')
 
 # ---------- filters -----------------------------------------------------------
@@ -298,11 +309,11 @@ st.markdown('#### Filters')
 
 col_a, col_b = st.columns(2)
 with col_a:
-    date_from = st.date_input('From', value=date.today() - timedelta(days=365))
+    date_from = st.date_input('From', value=st.session_state.date_from, help='Select the start date for filtering events')
 with col_b:
-    date_to = st.date_input('To', value=date.today())
+    date_to = st.date_input('To', value=st.session_state.date_to, help='Select the end date for filtering events')
 
-track_input_mode = st.radio('Track selection', ['Choose from list', 'Type manually'], horizontal=True)
+track_input_mode = st.radio('Track selection', ['Choose from list', 'Type manually'], horizontal=True, index=0 if st.session_state.track_input_mode == 'Choose from list' else 1)
 
 track_filter = ''
 if track_input_mode == 'Choose from list':
@@ -320,26 +331,43 @@ if track_input_mode == 'Choose from list':
                     track_names.add(t)
             track_list = sorted(track_names)
             if track_list:
-                choice = st.selectbox('Track', ['(all tracks)'] + track_list)
+                choice = st.selectbox('Track', ['(all tracks)'] + track_list, help='Select a track from the list or choose all')
                 track_filter = '' if choice == '(all tracks)' else choice
             else:
                 st.warning('No tracks found -- try "Type manually" or check the Org ID.')
-                track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina')
+                track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina', help='Enter part of the track name')
         except Exception as e:
             st.error('Could not load tracks: %s' % e)
-            track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina')
+            track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina', help='Enter part of the track name')
 else:
-    track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina')
+    track_filter = st.text_input('Track name fragment', placeholder='e.g. Carolina', value=st.session_state.track_filter, help='Enter part of the track name')
 
 class_filter = st.text_input(
-    'Class / session filter', value='Spec E30',
+    'Class / session filter', value=st.session_state.class_filter,
     placeholder='e.g. Spec E30, TTD, TTA',
-    help='Leave blank to show all classes.',
+    help='Leave blank to show all classes. Enter class name or session type.',
 )
 
-run_btn = st.button('FETCH GRID', use_container_width=True)
+col_clear, col_run = st.columns([1,3])
+with col_clear:
+    if st.button('Clear Filters', help='Reset all filters to default values'):
+        st.session_state.date_from = date.today() - timedelta(days=365)
+        st.session_state.date_to = date.today()
+        st.session_state.track_filter = ''
+        st.session_state.class_filter = 'Spec E30'
+        st.session_state.track_input_mode = 'Choose from list'
+        st.rerun()
+with col_run:
+    run_btn = st.button('FETCH GRID', use_container_width=True)
 if not run_btn:
     st.stop()
+
+# Update session state
+st.session_state.date_from = date_from
+st.session_state.date_to = date_to
+st.session_state.track_filter = track_filter
+st.session_state.class_filter = class_filter
+st.session_state.track_input_mode = track_input_mode
 
 # ---------- fetch + filter events --------------------------------------------
 
@@ -354,6 +382,8 @@ try:
 except Exception as e:
     prog.empty()
     st.error('Could not connect to Speedhive API: %s' % e)
+    if st.button('Retry'):
+        st.rerun()
     st.stop()
 
 matching = []
@@ -372,6 +402,8 @@ if not matching:
     st.warning('No events found for "%s" in the selected date range.' % (track_filter or 'all tracks'))
     st.stop()
 
+status.caption('Found %d matching events, now fetching sessions...' % len(matching))
+
 # ---------- scan sessions + classification ------------------------------------
 
 driver_best     = {}   # best result per driver
@@ -387,7 +419,7 @@ for i, ev in enumerate(matching):
     track    = event_track_name(ev) or ev_name
 
     prog.progress(int(i / total * 100), text='Scanning %d/%d: %s' % (i + 1, total, ev_name))
-    status.caption('%s  |  %s' % (date_str, ev_name))
+    status.caption('Processing event %d/%d: %s' % (i + 1, total, ev_name))
 
     for sess in fetch_sessions(ev_id):
         sess_id    = sess.get('id') or sess.get('sessionId')
@@ -499,6 +531,20 @@ prog.progress(100, text='Done!')
 prog.empty()
 status.empty()
 
+# ---------- sort and filter grid ----------------------------------------------------
+
+sort_by = st.selectbox('Sort grid by', ['Best Lap', 'Driver Name', 'Car Number'], help='Choose how to sort the grid')
+search = st.text_input('Search drivers', help='Filter the grid by driver name (case-insensitive)')
+
+if sort_by == 'Best Lap':
+    grid = sorted(grid, key=lambda r: r['_sec'])
+elif sort_by == 'Driver Name':
+    grid = sorted(grid, key=lambda r: r['Driver'].lower())
+elif sort_by == 'Car Number':
+    grid = sorted(grid, key=lambda r: int(r.get('Car #', '0') or '0'))
+
+grid = [r for r in grid if not search or search.lower() in r['Driver'].lower()]
+
 if not driver_best:
     st.warning(
         'No lap data found matching your filters.\n\n'
@@ -510,7 +556,19 @@ if not driver_best:
 
 # ---------- render results ----------------------------------------------------
 
-grid = sorted(driver_best.values(), key=lambda r: r['_sec'])
+sort_by = st.selectbox('Sort grid by', ['Best Lap', 'Driver Name', 'Car Number'], help='Choose how to sort the grid')
+search = st.text_input('Search drivers', help='Filter the grid by driver name (case-insensitive)')
+
+grid = list(driver_best.values())
+
+if sort_by == 'Best Lap':
+    grid = sorted(grid, key=lambda r: r['_sec'])
+elif sort_by == 'Driver Name':
+    grid = sorted(grid, key=lambda r: r['Driver'].lower())
+elif sort_by == 'Car Number':
+    grid = sorted(grid, key=lambda r: int(r.get('Car #', '0') or '0'))
+
+grid = [r for r in grid if not search or search.lower() in r['Driver'].lower()]
 
 track_label = track_filter or 'All Tracks'
 class_label = class_filter or 'All Classes'
@@ -578,7 +636,7 @@ for pos, row in enumerate(grid, 1):
     driver   = row['Driver']
     car_num  = row.get('Car #', '')
     label    = '%d. %s%s -- %s' % (pos, ('#%s  ' % car_num) if car_num else '', driver, row['Best Lap'])
-    with st.expander(label):
+    with st.expander(label, expanded=(pos == 1)):
         # -- full race info table --
         st.markdown('**Race details from best result**')
         raw = row.get('_raw', {})
