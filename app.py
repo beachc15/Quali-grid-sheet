@@ -544,8 +544,8 @@ if not driver_best:
 
 grid = list(driver_best.values())
 
-sort_by = st.selectbox('Sort grid by', ['Best Lap', 'Driver Name', 'Car Number'], help='Choose how to sort the grid')
-search = st.text_input('Search drivers', help='Filter the grid by driver name (case-insensitive)')
+sort_by = st.selectbox('Sort grid by', ['Best Lap', 'Driver Name', 'Car Number'], help='Choose how to sort the grid', key='sort_grid_by')
+search = st.text_input('Search drivers', help='Filter the grid by driver name (case-insensitive)', key='search_drivers')
 
 if sort_by == 'Best Lap':
     grid = sorted(grid, key=lambda r: r['_sec'])
@@ -557,20 +557,6 @@ elif sort_by == 'Car Number':
 grid = [r for r in grid if not search or search.lower() in r['Driver'].lower()]
 
 # ---------- render results ----------------------------------------------------
-
-sort_by = st.selectbox('Sort grid by', ['Best Lap', 'Driver Name', 'Car Number'], help='Choose how to sort the grid')
-search = st.text_input('Search drivers', help='Filter the grid by driver name (case-insensitive)')
-
-grid = list(driver_best.values())
-
-if sort_by == 'Best Lap':
-    grid = sorted(grid, key=lambda r: r['_sec'])
-elif sort_by == 'Driver Name':
-    grid = sorted(grid, key=lambda r: r['Driver'].lower())
-elif sort_by == 'Car Number':
-    grid = sorted(grid, key=lambda r: int(r.get('Car #', '0') or '0'))
-
-grid = [r for r in grid if not search or search.lower() in r['Driver'].lower()]
 
 track_label = track_filter or 'All Tracks'
 class_label = class_filter or 'All Classes'
