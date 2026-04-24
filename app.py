@@ -531,7 +531,18 @@ prog.progress(100, text='Done!')
 prog.empty()
 status.empty()
 
+if not driver_best:
+    st.warning(
+        'No lap data found matching your filters.\n\n'
+        'Tips:\n'
+        '- Enable Debug mode in Advanced Settings to see what class names and fields the API actually returns.\n'
+        '- Try leaving the class filter blank to see ALL results first.'
+    )
+    st.stop()
+
 # ---------- sort and filter grid ----------------------------------------------------
+
+grid = list(driver_best.values())
 
 sort_by = st.selectbox('Sort grid by', ['Best Lap', 'Driver Name', 'Car Number'], help='Choose how to sort the grid')
 search = st.text_input('Search drivers', help='Filter the grid by driver name (case-insensitive)')
@@ -544,15 +555,6 @@ elif sort_by == 'Car Number':
     grid = sorted(grid, key=lambda r: int(r.get('Car #', '0') or '0'))
 
 grid = [r for r in grid if not search or search.lower() in r['Driver'].lower()]
-
-if not driver_best:
-    st.warning(
-        'No lap data found matching your filters.\n\n'
-        'Tips:\n'
-        '- Enable Debug mode in Advanced Settings to see what class names and fields the API actually returns.\n'
-        '- Try leaving the class filter blank to see ALL results first.'
-    )
-    st.stop()
 
 # ---------- render results ----------------------------------------------------
 
