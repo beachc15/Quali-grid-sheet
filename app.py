@@ -27,69 +27,177 @@ if 'track_input_mode' not in st.session_state:
 st.markdown('''
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&display=swap');
+  :root {
+    --bg: #0f1117;
+    --surface: #171c29;
+    --surface-strong: #1a1f2e;
+    --surface-soft: #262f44;
+    --border: #2d3748;
+    --text: #e8e8e8;
+    --muted: #9ca3af;
+    --accent: #e94560;
+    --accent-soft: #d66378;
+    --success: #68d391;
+    --info: #63b3ed;
+    --warn: #f6ad55;
+  }
+
   html, body, [class*="css"] { font-family: 'Barlow', sans-serif; }
-  .stApp { background-color: #0f1117; color: #e8e8e8; }
+  .stApp {
+    background-color: var(--bg);
+    color: var(--text);
+  }
+
   .page-header {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-    border-bottom: 3px solid #e94560;
+    background: linear-gradient(135deg, #141b2f 0%, #17213c 50%, #122744 100%);
+    border-bottom: 1px solid rgba(233, 69, 96, 0.35);
     padding: 1.5rem 1.5rem 1.2rem;
     margin-bottom: 1.5rem;
-    border-radius: 0 0 8px 8px;
+    border-radius: 0 0 14px 14px;
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.25);
   }
   .page-header h1 {
     font-family: 'Barlow Condensed', sans-serif;
-    font-size: 2rem; font-weight: 700;
-    letter-spacing: 0.05em; color: #ffffff; margin: 0 0 0.2rem;
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #ffffff;
+    margin: 0 0 0.2rem;
   }
-  .page-header p { color: #a0aec0; font-size: 0.9rem; margin: 0; }
-  .accent { color: #e94560; }
+  .page-header p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0;
+  }
+  .accent { color: var(--accent); }
+
   .pill {
-    display: inline-block; padding: 0.2rem 0.7rem;
-    border-radius: 20px; font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em;
+    display: inline-block;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: var(--surface-strong);
+    color: var(--text);
   }
-  .pill-success { background: #1c4532; color: #68d391; }
-  .pill-warn    { background: #744210; color: #f6ad55; }
-  .pill-info    { background: #1a365d; color: #63b3ed; }
-  .grid-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin-top: 1rem; }
-  .grid-table thead tr { background: #e94560; color: white; }
+  .pill-success { background: rgba(104, 211, 145, 0.15); color: var(--success); }
+  .pill-warn    { background: rgba(246, 160, 85, 0.15); color: var(--warn); }
+  .pill-info    { background: rgba(99, 179, 237, 0.12); color: var(--info); }
+
+  .grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    margin-top: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .grid-table thead tr { background: rgba(233, 69, 96, 0.95); color: white; }
   .grid-table thead th {
-    font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    padding: 0.6rem 0.75rem; text-align: left;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.8rem 0.85rem;
+    text-align: left;
   }
-  .grid-table tbody tr:nth-child(even) { background: #1a1f2e; }
-  .grid-table tbody tr:nth-child(odd)  { background: #151929; }
-  .grid-table tbody tr:hover           { background: #0f3460; }
-  .grid-table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid #2d3748; color: #e8e8e8; }
-  .grid-table td.pos { color: #a0aec0; font-size: 0.82rem; width: 2rem; }
-  .grid-table td.laptime { font-family: 'Barlow Condensed', sans-serif; font-size: 1rem; color: #68d391; font-weight: 600; }
+  .grid-table tbody tr:nth-child(even) { background: #161c2a; }
+  .grid-table tbody tr:nth-child(odd)  { background: #111524; }
+  .grid-table tbody tr:hover           { background: #1e2a45; }
+  .grid-table td {
+    padding: 0.65rem 0.9rem;
+    border-bottom: 1px solid rgba(45, 55, 72, 0.65);
+    color: var(--text);
+  }
+  .grid-table td.pos { color: var(--muted); font-size: 0.82rem; width: 2.4rem; }
+  .grid-table td.laptime {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 1rem;
+    color: var(--success);
+    font-weight: 700;
+  }
   .grid-table tbody tr:first-child td.laptime { color: #f6e05e; }
-  .grid-table td.meta { color: #a0aec0; font-size: 0.8rem; }
-  div[data-testid="stButton"] > button {
-    background: #e94560 !important; color: white !important; border: none !important;
+  .grid-table td.meta { color: var(--muted); font-size: 0.82rem; }
+
+  div[data-testid="stButton"] > button,
+  div[data-testid="stDownloadButton"] > button {
     font-family: 'Barlow Condensed', sans-serif !important;
-    font-size: 1.1rem !important; font-weight: 700 !important;
-    letter-spacing: 0.1em !important; text-transform: uppercase !important;
-    padding: 0.7rem 2rem !important; border-radius: 4px !important; width: 100% !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+    transition: background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+    border-radius: 10px !important;
+    width: 100% !important;
+    min-height: 48px;
+    padding: 0.65rem 1.35rem !important;
+    box-shadow: 0 12px 22px rgba(0, 0, 0, 0.18);
+  }
+  div[data-testid="stButton"] > button {
+    background: var(--accent) !important;
+    color: white !important;
+    border: 1px solid transparent !important;
+  }
+  div[data-testid="stButton"] > button:hover {
+    background: var(--accent-soft) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 16px 26px rgba(0, 0, 0, 0.22);
   }
   div[data-testid="stDownloadButton"] > button {
-    background: #2d3748 !important; color: #e8e8e8 !important;
-    border: 1px solid #4a5568 !important;
-    font-family: 'Barlow Condensed', sans-serif !important;
-    font-size: 0.9rem !important; font-weight: 600 !important;
-    letter-spacing: 0.06em !important; text-transform: uppercase !important; width: 100% !important;
+    background: var(--surface-strong) !important;
+    color: var(--text) !important;
+    border: 1px solid rgba(148, 163, 184, 0.25) !important;
   }
+  div[data-testid="stDownloadButton"] > button:hover {
+    background: #1f2937 !important;
+    transform: translateY(-1px);
+    border-color: rgba(233, 69, 96, 0.4) !important;
+  }
+
   div[data-testid="stSelectbox"] label,
   div[data-testid="stDateInput"] label,
   div[data-testid="stTextInput"] label,
   div[data-testid="stNumberInput"] label,
   div[data-testid="stRadio"] label,
   div[data-testid="stCheckbox"] label {
-    color: #a0aec0 !important; font-family: 'Barlow Condensed', sans-serif !important;
-    font-size: 0.75rem !important; font-weight: 600 !important;
-    letter-spacing: 0.1em !important; text-transform: uppercase !important;
+    color: var(--muted) !important;
+    font-family: 'Barlow Condensed', sans-serif !important;
+    font-size: 0.78rem !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.1em !important;
+    text-transform: uppercase !important;
   }
-  div[data-testid="stExpander"] { background: #1a1f2e !important; border: 1px solid #2d3748 !important; border-radius: 6px !important; }
+  div[data-testid="stTextInput"] input,
+  div[data-testid="stNumberInput"] input,
+  div[data-testid="stDateInput"] input,
+  div[data-testid="stSelectbox"] select {
+    background: #131824 !important;
+    color: var(--text) !important;
+    border: 1px solid rgba(148, 163, 184, 0.15) !important;
+    border-radius: 10px !important;
+    padding: 0.65rem 0.9rem !important;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.02);
+  }
+  div[data-testid="stTextInput"] input:focus,
+  div[data-testid="stNumberInput"] input:focus,
+  div[data-testid="stDateInput"] input:focus,
+  div[data-testid="stSelectbox"] select:focus {
+    outline: none !important;
+    border-color: rgba(233, 69, 96, 0.55) !important;
+    box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.12) !important;
+  }
+
+  div[data-testid="stExpander"] {
+    background: var(--surface-strong) !important;
+    border: 1px solid rgba(45, 55, 72, 0.75) !important;
+    border-radius: 14px !important;
+  }
+  .stMarkdown h4, .stMarkdown p, .stMarkdown div {
+    color: var(--text) !important;
+  }
   footer { visibility: hidden; }
 </style>
 ''', unsafe_allow_html=True)
